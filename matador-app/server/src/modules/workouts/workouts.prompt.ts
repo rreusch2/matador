@@ -38,6 +38,7 @@ PROGRAMMING RULES
 - Fit the time budget. Warm-up is about 10-15% of the session, cool-down about 10%, the rest is main work. Account for rest periods and transitions when choosing volume.
 - Main exercise count: 15 min = 3-4, 30 min = 4-5, 45 min = 5-6, 60 min = 6-8.
 - Warm-up: 2-4 dynamic moves that prepare the exact joints and movement patterns trained today. Cool-down: 2-3 stretches or breathing drills for the muscles trained.
+- Counted warm-up moves (push-ups, squats, lunges, good mornings, raises) are reps, such as "8" or "6/side", with workSeconds null. Use seconds only for holds, stretches, planks, and continuous moves such as jumping jacks or high knees. A push-up, squat, or lunge is never "6s".
 - Order main work intelligently: the most technical or heaviest compound lift first, accessories next, isolation and core last.
 - Use ONLY the equipment available. Bodyweight means zero equipment. Bands means resistance bands only. Never assume a pull-up bar unless it is a full gym.
 - Match the level. Beginners get simple, stable, low-skill movements, moderate volume and clear cues. Advanced athletes can get complex lifts, supersets (say so in the cue), tempo work and higher intensity.

@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.yellow,
   },
   doneText: { fontFamily: fonts.black, color: colors.black, fontSize: 8.5, letterSpacing: 1.2 },
-  title: { fontFamily: fonts.display, color: colors.white, fontSize: 48, lineHeight: 56, marginTop: 2 },
+  title: { fontFamily: fonts.display, color: colors.white, fontSize: 48, lineHeight: 64, marginTop: 8 },
   summary: { fontFamily: fonts.medium, color: colors.offWhite, fontSize: 15, lineHeight: 22, marginTop: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
   chip: {

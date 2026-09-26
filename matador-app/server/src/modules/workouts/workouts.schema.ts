@@ -109,21 +109,36 @@ const clean = (v: unknown, max: number) =>
 const seconds = (v: unknown, min: number, max: number) =>
   typeof v === 'number' && Number.isFinite(v) && v >= min ? Math.min(Math.round(v), max) : null;
 
+const TIME_UNIT =
+  /\d+\s*(?:s|sec|secs|seconds)\b|\d+(?:\.\d+)?\s*(?:m|min|mins|minutes)\b|\d+\s*:\s*\d+/i;
+const COUNTED =
+  /\b(push[\s-]?ups?|squats?|lunges?|deadlifts?|rows?|press(?:es)?|curls?|raises?|pull[\s-]?ups?|chin[\s-]?ups?|dips?|thrusts?|bridges?|step[\s-]?ups?|good mornings?|crunches|sit[\s-]?ups?|swings?|kickbacks?|flies|pulldowns?|shrugs?)\b/i;
+const HOLD = /\b(holds?|stretches?|planks?|poses?|breaths?|breathing|isometrics?)\b/i;
+
 function cleanMove(raw: unknown): Move | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const name = clean(r.name, 48);
-  const reps = clean(r.reps, 18);
+  let reps = clean(r.reps, 18);
   if (!name || !reps) return null;
   const sets =
     typeof r.sets === 'number' && Number.isFinite(r.sets) ? Math.min(Math.max(Math.round(r.sets), 1), 8) : null;
+  // "6s" on a push-up is a set of 6, not a 6 second timer.
+  const counted = COUNTED.test(name) && !HOLD.test(name);
+  let workSeconds = seconds(r.workSeconds, 5, 900);
+  if (counted) {
+    reps = reps.replace(/\s*(?:s|sec|secs|seconds)\b/gi, '').trim() || reps;
+    workSeconds = null;
+  } else if (!TIME_UNIT.test(reps)) {
+    workSeconds = null;
+  }
   return {
     name,
     sets,
     reps,
     rest: clean(r.rest, 12) || null,
     cue: clean(r.cue, 100),
-    workSeconds: seconds(r.workSeconds, 5, 900),
+    workSeconds,
     restSeconds: seconds(r.restSeconds, 5, 600),
     exerciseId: clean(r.exerciseId, 12) || null,
     videoId: null,

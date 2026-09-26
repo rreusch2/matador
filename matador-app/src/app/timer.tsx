@@ -180,6 +180,7 @@ export default function TimerScreen() {
 
   const next = phases[index + 1];
   const nextLabel = next ? (next.kind === 'rest' ? 'REST' : next.title) : null;
+  const upNext = phase.kind === 'rest' ? phase.upNext : null;
 
   /** Rendered twice (under and inside the fill), so the video only reserves space here. */
   const content = (ink: string, dim: string, measure = false) => (
@@ -188,7 +189,7 @@ export default function TimerScreen() {
         {phase.top}
       </Text>
       <Text
-        style={[styles.title, hasVideo && styles.titleSmall, { color: ink }]}
+        style={[styles.title, hasVideo && styles.titleSmall, phase.kind === 'rest' && styles.restTitle, { color: ink }]}
         numberOfLines={2}
         adjustsFontSizeToFit
         minimumFontScale={0.6}
@@ -200,6 +201,12 @@ export default function TimerScreen() {
           style={[styles.videoSlot, { width: videoW, height: videoH }]}
           onLayout={measure ? (e) => setVideoTop(e.nativeEvent.layout.y) : undefined}
         />
+      )}
+      {upNext && (
+        <Text style={styles.upNextCaption} numberOfLines={2}>
+          <Text style={styles.upNextKicker}>UP NEXT {'\u00B7'} </Text>
+          <Text style={{ color: ink }}>{upNext}</Text>
+        </Text>
       )}
       {manual ? (
         <>
@@ -223,7 +230,7 @@ export default function TimerScreen() {
           {phase.cue}
         </Text>
       )}
-      {nextLabel && (
+      {nextLabel && !upNext && (
         <Text style={[styles.next, { color: dim }]} numberOfLines={1}>
           NEXT {'\u00B7'} {nextLabel}
           {next && next.seconds > 0 ? ` ${next.seconds}s` : ''}
@@ -328,8 +335,11 @@ const styles = StyleSheet.create({
   top: { fontFamily: fonts.black, fontSize: 12, letterSpacing: 3 },
   title: { fontFamily: fonts.display, fontSize: 44, lineHeight: 54, marginTop: 18, letterSpacing: 1, textAlign: 'center' },
   titleSmall: { fontSize: 32, lineHeight: 40, marginTop: 14 },
+  restTitle: { fontSize: 64, lineHeight: 76, letterSpacing: 4, marginTop: 16 },
   videoSlot: { marginTop: 16, marginBottom: 2 },
   video: { position: 'absolute' },
+  upNextCaption: { fontFamily: fonts.bold, fontSize: 13, lineHeight: 18, letterSpacing: 0.6, textAlign: 'center', marginTop: 8, paddingHorizontal: 8 },
+  upNextKicker: { fontFamily: fonts.black, color: colors.yellow, fontSize: 12, letterSpacing: 1.4 },
   clock: { fontFamily: fonts.display, fontSize: 160, lineHeight: 210, marginTop: 4 },
   clockSmall: { fontSize: 104, lineHeight: 136 },
   reps: { fontFamily: fonts.display, fontSize: 112, lineHeight: 150, marginTop: 4 },

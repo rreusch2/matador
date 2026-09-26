@@ -16,6 +16,8 @@ export type Phase = {
   reps: string;
   /** YouTube demo. Prep and rest phases preview the exercise that comes next. */
   videoId: string | null;
+  /** On a rest that leads into a different exercise, the name that video is previewing. */
+  upNext?: string | null;
 };
 
 export const PREP_SECONDS = 5;
@@ -45,7 +47,29 @@ export function parseSeconds(text: string | null | undefined): number | null {
   return null;
 }
 
-const workOf = (m: Move) => m.workSeconds ?? parseSeconds(m.reps);
+const TIME_UNIT =
+  /\d+\s*(?:s|sec|secs|seconds)\b|\d+(?:\.\d+)?\s*(?:m|min|mins|minutes)\b|\d+\s*:\s*\d+/i;
+/** Movements you count. A model often writes these as "6s" during a warm-up. */
+const COUNTED =
+  /\b(push[\s-]?ups?|squats?|lunges?|deadlifts?|rows?|press(?:es)?|curls?|raises?|pull[\s-]?ups?|chin[\s-]?ups?|dips?|thrusts?|bridges?|step[\s-]?ups?|good mornings?|crunches|sit[\s-]?ups?|swings?|kickbacks?|flies|pulldowns?|shrugs?)\b/i;
+const HOLD = /\b(holds?|stretches?|planks?|poses?|breaths?|breathing|isometrics?)\b/i;
+
+const countedMove = (name: string) => COUNTED.test(name) && !HOLD.test(name);
+
+/** A countdown only when the prescription is actually time, not a rep count. */
+function workOf(m: Move): number | null {
+  if (countedMove(m.name)) return null;
+  if (!TIME_UNIT.test(m.reps)) return null;
+  return m.workSeconds ?? parseSeconds(m.reps);
+}
+
+/** "6s" on a push-up is 6 reps. */
+function displayReps(m: Move): string {
+  if (!countedMove(m.name)) return m.reps;
+  const reps = m.reps.replace(/\s*(?:s|sec|secs|seconds)\b/gi, '').trim();
+  return reps || m.reps;
+}
+
 const restOf = (m: Move) => m.restSeconds ?? parseSeconds(m.rest);
 
 function movePhases(move: Move, section: string, index: number, total: number): Phase[] {
@@ -64,7 +88,7 @@ function movePhases(move: Move, section: string, index: number, total: number): 
       top,
       counter,
       cue: move.cue,
-      reps: move.reps,
+      reps: displayReps(move),
       videoId: move.videoId ?? null,
     });
     if (rest) {
@@ -117,6 +141,24 @@ export function buildSessionPhases(plan: WorkoutPlan): Phase[] {
     const p = phases[i];
     if (p.kind === 'work' || p.kind === 'reps') upcoming = p.videoId;
     else p.videoId = upcoming;
+  }
+
+  const exerciseAt = (start: number, step: number) => {
+    for (let i = start; i >= 0 && i < phases.length; i += step) {
+      const kind = phases[i].kind;
+      if (kind === 'work' || kind === 'reps') return phases[i].title;
+    }
+    return null;
+  };
+  for (let i = 0; i < phases.length; i++) {
+    const phase = phases[i];
+    if (phase.kind !== 'rest') continue;
+    const nextName = exerciseAt(i + 1, 1);
+    const prevName = exerciseAt(i - 1, -1);
+    if (nextName && nextName !== prevName) {
+      phase.upNext = nextName;
+      phase.top = 'NEXT EXERCISE';
+    }
   }
   return phases;
 }
