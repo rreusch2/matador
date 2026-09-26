@@ -26,6 +26,9 @@ export type Move = {
   /** Seconds per set when done for time. Absent on plans saved before guided sessions. */
   workSeconds?: number | null;
   restSeconds?: number | null;
+  /** Catalog slug and YouTube demo id. Absent on plans saved before the exercise library. */
+  exerciseId?: string | null;
+  videoId?: string | null;
 };
 
 export type WorkoutPlan = {

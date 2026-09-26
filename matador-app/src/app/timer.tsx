@@ -12,6 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ExerciseVideo } from '@/components/ExerciseVideo';
 import { Button, PressableScale } from '@/components/ui';
 import { colors, fonts, radius } from '@/constants/theme';
 import { useFitness } from '@/context/fitness';
@@ -64,6 +65,8 @@ export default function TimerScreen() {
   const [paused, setPaused] = useState(false);
   const [done, setDone] = useState(false);
   const [logged, setLogged] = useState(false);
+  const [failedVideos, setFailedVideos] = useState<ReadonlySet<string>>(() => new Set());
+  const [videoTop, setVideoTop] = useState<number | null>(null);
 
   const indexRef = useRef(0);
   const phaseEnd = useRef(Date.now() + phases[0].seconds * 1000);
@@ -75,6 +78,12 @@ export default function TimerScreen() {
   const look = LOOK[phase.kind];
   const manual = phase.kind === 'reps';
   const totalSeconds = phases.reduce((sum, p) => sum + p.seconds, 0);
+
+  const videoId = phase.videoId && !failedVideos.has(phase.videoId) ? phase.videoId : null;
+  const hasVideo = !!videoId;
+  const videoW = Math.min(width - 48, 420);
+  const videoH = Math.round((videoW * 9) / 16);
+  const showCue = !!phase.cue && (!hasVideo || height >= 800);
 
   const startFill = (fromMs: number, durationMs: number) => {
     cancelAnimation(fill);
@@ -171,33 +180,44 @@ export default function TimerScreen() {
   const next = phases[index + 1];
   const nextLabel = next ? (next.kind === 'rest' ? 'REST' : next.title) : null;
 
-  const content = (ink: string, dim: string) => (
+  /** Rendered twice (under and inside the fill), so the video only reserves space here. */
+  const content = (ink: string, dim: string, measure = false) => (
     <View style={[styles.content, { width, height, paddingTop: insets.top + 70 }]}>
       <Text style={[styles.top, { color: dim }]} numberOfLines={1}>
         {phase.top}
       </Text>
       <Text
-        style={[styles.title, { color: ink }]}
+        style={[styles.title, hasVideo && styles.titleSmall, { color: ink }]}
         numberOfLines={2}
         adjustsFontSizeToFit
         minimumFontScale={0.6}
       >
         {phase.title}
       </Text>
+      {hasVideo && (
+        <View
+          style={[styles.videoSlot, { width: videoW, height: videoH }]}
+          onLayout={measure ? (e) => setVideoTop(e.nativeEvent.layout.y) : undefined}
+        />
+      )}
       {manual ? (
         <>
-          <Text style={[styles.reps, { color: ink }]} numberOfLines={1} adjustsFontSizeToFit>
+          <Text
+            style={[styles.reps, hasVideo && styles.repsSmall, { color: ink }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+          >
             {phase.reps}
           </Text>
           {PLAIN_REPS.test(phase.reps) && <Text style={[styles.repsLabel, { color: dim }]}>REPS</Text>}
         </>
       ) : (
-        <Text style={[styles.clock, { color: ink }]} adjustsFontSizeToFit numberOfLines={1}>
+        <Text style={[styles.clock, hasVideo && styles.clockSmall, { color: ink }]} adjustsFontSizeToFit numberOfLines={1}>
           {phase.seconds >= 60 ? formatClock(left / 1000) : Math.ceil(left / 1000)}
         </Text>
       )}
       <Text style={[styles.counter, { color: ink }]}>{phase.counter}</Text>
-      {!!phase.cue && (
+      {showCue && (
         <Text style={[styles.cue, { color: dim }]} numberOfLines={2}>
           {phase.cue}
         </Text>
@@ -249,13 +269,25 @@ export default function TimerScreen() {
 
   return (
     <View style={styles.screen}>
-      {content(colors.white, colors.muted)}
+      {content(colors.white, colors.muted, true)}
 
       <Animated.View style={[styles.fill, { backgroundColor: look.fill }, fillStyle]}>
         <View style={{ position: 'absolute', left: 0, bottom: 0 }}>
           {content(look.ink, look.ink === colors.black ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.7)')}
         </View>
       </Animated.View>
+
+      {videoId && videoTop !== null && (
+        <View style={[styles.video, { top: videoTop, left: (width - videoW) / 2 }]}>
+          <ExerciseVideo
+            videoId={videoId}
+            width={videoW}
+            height={videoH}
+            play={!paused}
+            onError={() => setFailedVideos((prev) => new Set(prev).add(videoId))}
+          />
+        </View>
+      )}
 
       <View style={[styles.topBar, { top: insets.top + 12 }]}>
         <PressableScale onPress={() => router.back()} style={styles.roundBtn} scaleTo={0.9} accessibilityLabel="Close timer">
@@ -294,8 +326,13 @@ const styles = StyleSheet.create({
   content: { alignItems: 'center', paddingHorizontal: 24 },
   top: { fontFamily: fonts.black, fontSize: 12, letterSpacing: 3 },
   title: { fontFamily: fonts.display, fontSize: 44, lineHeight: 54, marginTop: 18, letterSpacing: 1, textAlign: 'center' },
+  titleSmall: { fontSize: 32, lineHeight: 40, marginTop: 14 },
+  videoSlot: { marginTop: 16, marginBottom: 2 },
+  video: { position: 'absolute' },
   clock: { fontFamily: fonts.display, fontSize: 160, lineHeight: 210, marginTop: 4 },
+  clockSmall: { fontSize: 104, lineHeight: 136 },
   reps: { fontFamily: fonts.display, fontSize: 112, lineHeight: 150, marginTop: 4 },
+  repsSmall: { fontSize: 80, lineHeight: 106 },
   repsLabel: { fontFamily: fonts.black, fontSize: 13, letterSpacing: 3, marginTop: -4, marginBottom: 8 },
   counter: { fontFamily: fonts.black, fontSize: 15, letterSpacing: 3 },
   cue: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 12 },

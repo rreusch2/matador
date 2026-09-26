@@ -14,6 +14,8 @@ export type Phase = {
   cue: string;
   /** Shown in place of the clock on `reps` phases. */
   reps: string;
+  /** YouTube demo. Prep and rest phases preview the exercise that comes next. */
+  videoId: string | null;
 };
 
 export const PREP_SECONDS = 5;
@@ -63,6 +65,7 @@ function movePhases(move: Move, section: string, index: number, total: number): 
       counter,
       cue: move.cue,
       reps: move.reps,
+      videoId: move.videoId ?? null,
     });
     if (rest) {
       phases.push({
@@ -73,6 +76,7 @@ function movePhases(move: Move, section: string, index: number, total: number): 
         counter,
         cue: '',
         reps: '',
+        videoId: null,
       });
     }
   }
@@ -98,6 +102,7 @@ export function buildSessionPhases(plan: WorkoutPlan): Phase[] {
       counter: `${moves.length} EXERCISES`,
       cue: '',
       reps: '',
+      videoId: null,
     },
   ];
   moves.forEach(({ section, move }, i) => {
@@ -106,19 +111,35 @@ export function buildSessionPhases(plan: WorkoutPlan): Phase[] {
 
   // Never finish on a rest countdown.
   while (phases.length > 1 && phases[phases.length - 1].kind === 'rest') phases.pop();
+
+  let upcoming: string | null = null;
+  for (let i = phases.length - 1; i >= 0; i--) {
+    const p = phases[i];
+    if (p.kind === 'work' || p.kind === 'reps') upcoming = p.videoId;
+    else p.videoId = upcoming;
+  }
   return phases;
 }
 
 /** The classic work/rest/rounds loop, in the same shape. */
 export function buildIntervalPhases(name: string, work: number, rest: number, rounds: number): Phase[] {
   const phases: Phase[] = [
-    { kind: 'prep', seconds: PREP_SECONDS, title: 'GET READY', top: name, counter: `${rounds} ROUNDS`, cue: '', reps: '' },
+    {
+      kind: 'prep',
+      seconds: PREP_SECONDS,
+      title: 'GET READY',
+      top: name,
+      counter: `${rounds} ROUNDS`,
+      cue: '',
+      reps: '',
+      videoId: null,
+    },
   ];
   for (let round = 1; round <= rounds; round++) {
     const counter = `ROUND ${round} / ${rounds}`;
-    phases.push({ kind: 'work', seconds: work, title: 'WORK', top: name, counter, cue: '', reps: '' });
+    phases.push({ kind: 'work', seconds: work, title: 'WORK', top: name, counter, cue: '', reps: '', videoId: null });
     if (rest > 0 && round < rounds) {
-      phases.push({ kind: 'rest', seconds: rest, title: 'REST', top: name, counter, cue: '', reps: '' });
+      phases.push({ kind: 'rest', seconds: rest, title: 'REST', top: name, counter, cue: '', reps: '', videoId: null });
     }
   }
   return phases;
