@@ -48,9 +48,9 @@ export default function AuthScreen() {
   const { signIn, signUp, resetPassword } = useAuth();
 
   const [mode, setMode] = useState<Mode>('signin');
-  const [firstName, setFirstName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [marketing, setMarketing] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -59,14 +59,14 @@ export default function AuthScreen() {
 
   const emailRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
 
   const cleanEmail = email.trim().toLowerCase();
   const emailOk = EMAIL_RE.test(cleanEmail);
   const passwordPart = Math.min(password.length / MIN_PASSWORD, 1);
+  const confirmOk = confirm.length > 0 && confirm === password;
   const parts =
-    mode === 'signup'
-      ? [Math.min(firstName.trim().length / 2, 1), emailOk ? 1 : 0, passwordPart]
-      : [emailOk ? 1 : 0, passwordPart];
+    mode === 'signup' ? [emailOk ? 1 : 0, passwordPart, confirmOk ? 1 : 0] : [emailOk ? 1 : 0, passwordPart];
   const progress = notice ? 1 : parts.reduce((a, b) => a + b, 0) / parts.length;
 
   const switchMode = (next: Mode) => {
@@ -78,11 +78,12 @@ export default function AuthScreen() {
 
   const submit = async () => {
     if (busy) return;
-    if (mode === 'signup' && !firstName.trim()) return setError('Tell us your first name.');
     if (!emailOk) return setError('Enter a valid email address.');
     if (mode === 'signup' && password.length < MIN_PASSWORD)
       return setError(`Password needs at least ${MIN_PASSWORD} characters.`);
     if (!password) return setError('Enter your password.');
+    if (mode === 'signup' && !confirm) return setError('Confirm your password.');
+    if (mode === 'signup' && confirm !== password) return setError('Those passwords do not match.');
 
     setBusy(true);
     setError(null);
@@ -91,7 +92,7 @@ export default function AuthScreen() {
       if (err) setError(err);
       else haptic.success();
     } else {
-      const res = await signUp({ firstName: firstName.trim(), email: cleanEmail, password, marketing });
+      const res = await signUp({ email: cleanEmail, password, marketing });
       if (res.error) setError(res.error);
       else {
         haptic.success();
@@ -123,6 +124,7 @@ export default function AuthScreen() {
     setNotice(null);
     setMode('signin');
     setPassword('');
+    setConfirm('');
     setError(null);
   };
 
@@ -164,11 +166,7 @@ export default function AuthScreen() {
               <Reveal delay={120} from={16}>
                 <Text style={styles.kicker}>{mode === 'signin' ? 'MATADOR MEMBERS' : 'NEW TO MATADOR'}</Text>
                 <Text style={styles.title}>{mode === 'signin' ? 'WELCOME BACK.' : 'JOIN THE HERD.'}</Text>
-                <Text style={styles.subtitle}>
-                  {mode === 'signin'
-                    ? 'Sign in to pick up where you left off.'
-                    : 'Fuel, gear and training that keeps up with you.'}
-                </Text>
+                <View style={styles.rule} />
               </Reveal>
 
               <Reveal delay={220} from={16}>
@@ -177,22 +175,6 @@ export default function AuthScreen() {
 
               <Reveal delay={320} from={16}>
                 <Animated.View layout={layout} style={{ gap: 14 }}>
-                  {mode === 'signup' && (
-                    <Animated.View entering={FadeIn.duration(260)} exiting={FadeOut.duration(160)}>
-                      <Field
-                        label="FIRST NAME"
-                        icon="person-outline"
-                        value={firstName}
-                        onChangeText={setFirstName}
-                        autoCapitalize="words"
-                        autoComplete="given-name"
-                        textContentType="givenName"
-                        returnKeyType="next"
-                        onSubmitEditing={() => emailRef.current?.focus()}
-                      />
-                    </Animated.View>
-                  )}
-
                   <Animated.View layout={layout}>
                     <Field
                       ref={emailRef}
@@ -224,8 +206,8 @@ export default function AuthScreen() {
                       autoCorrect={false}
                       autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                       textContentType={mode === 'signup' ? 'newPassword' : 'password'}
-                      returnKeyType="go"
-                      onSubmitEditing={submit}
+                      returnKeyType={mode === 'signup' ? 'next' : 'go'}
+                      onSubmitEditing={() => (mode === 'signup' ? confirmRef.current?.focus() : submit())}
                       trailing={
                         <Pressable
                           onPress={() => setShowPassword((s) => !s)}
@@ -244,6 +226,35 @@ export default function AuthScreen() {
                       </Pressable>
                     )}
                   </Animated.View>
+
+                  {mode === 'signup' && (
+                    <Animated.View entering={FadeIn.duration(260)} exiting={FadeOut.duration(160)} layout={layout}>
+                      <Field
+                        ref={confirmRef}
+                        label="CONFIRM PASSWORD"
+                        icon="lock-closed-outline"
+                        value={confirm}
+                        onChangeText={setConfirm}
+                        valid={confirmOk}
+                        secureTextEntry={!showPassword}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoComplete="new-password"
+                        textContentType="newPassword"
+                        returnKeyType="go"
+                        onSubmitEditing={submit}
+                        trailing={
+                          <Pressable
+                            onPress={() => setShowPassword((s) => !s)}
+                            hitSlop={10}
+                            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                          >
+                            <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.muted} />
+                          </Pressable>
+                        }
+                      />
+                    </Animated.View>
+                  )}
 
                   {mode === 'signup' && (
                     <Animated.View entering={FadeIn.duration(260)} exiting={FadeOut.duration(160)}>
@@ -449,7 +460,7 @@ const Field = forwardRef<TextInput, FieldProps>(function Field({ label, icon, va
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.black, overflow: 'hidden' },
   watermark: { position: 'absolute', opacity: 0.045 },
-  logoWrap: { alignSelf: 'center', alignItems: 'center', justifyContent: 'center', marginBottom: 30 },
+  logoWrap: { alignSelf: 'center', alignItems: 'center', justifyContent: 'center', marginBottom: 22 },
   glow: {
     position: 'absolute',
     width: 40,
@@ -460,12 +471,13 @@ const styles = StyleSheet.create({
   },
   fill: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden' },
   fillLogo: { position: 'absolute', left: 0, bottom: 0 },
-  kicker: { fontFamily: fonts.bold, color: colors.yellow, fontSize: 11, letterSpacing: 3, marginBottom: 6 },
-  title: { fontFamily: fonts.display, color: colors.white, fontSize: 44, lineHeight: 50, letterSpacing: 0.5 },
-  subtitle: { fontFamily: fonts.medium, color: colors.muted, fontSize: 15, lineHeight: 22, marginTop: 6 },
+  kicker: { fontFamily: fonts.bold, color: colors.yellow, fontSize: 11, letterSpacing: 3, marginBottom: 8 },
+  title: { fontFamily: fonts.display, color: colors.white, fontSize: 44, lineHeight: 60, letterSpacing: 0.5 },
+  rule: { width: 42, height: 3, borderRadius: 2, backgroundColor: colors.yellow, marginTop: 14 },
+  subtitle: { fontFamily: fonts.medium, color: colors.muted, fontSize: 15, lineHeight: 22, marginTop: 10 },
   toggle: {
     flexDirection: 'row',
-    marginTop: 26,
+    marginTop: 22,
     marginBottom: 22,
     padding: 4,
     borderRadius: radius.pill,

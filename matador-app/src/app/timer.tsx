@@ -167,10 +167,10 @@ export default function TimerScreen() {
 
   const saveWorkout = () => {
     if (plan) {
-      logWorkout(plan.logAs, plan.minutes);
+      logWorkout(plan.logAs, plan.minutes, { source: 'plan', planId: plan.id });
       markPlanCompleted(plan.id);
     } else {
-      logWorkout('hiit', Math.max(1, Math.round(totalSeconds / 60)));
+      logWorkout('hiit', Math.max(1, Math.round(totalSeconds / 60)), { source: 'timer' });
     }
     setLogged(true);
     haptic.success();

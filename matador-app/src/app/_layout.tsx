@@ -71,6 +71,7 @@ function AppShell() {
           <Stack.Screen name="timer" options={{ animation: 'fade', gestureEnabled: false }} />
           <Stack.Screen name="workout-plan" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="workout-history" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="activity" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="account" options={{ animation: 'slide_from_bottom' }} />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>

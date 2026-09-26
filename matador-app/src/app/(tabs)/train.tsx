@@ -1,11 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ActivitySession } from '@/components/ActivitySession';
 import { Logo } from '@/components/Logo';
 import { SessionRow, useSavedPlans } from '@/components/SessionRow';
 import { Button, PressableScale, Reveal } from '@/components/ui';
@@ -15,25 +15,7 @@ import { WORKOUT_TYPES, useFitness, type WorkoutType } from '@/context/fitness';
 import { savedPlans } from '@/services/workouts';
 import { haptic } from '@/utils/haptics';
 
-type Preset = { key: string; name: string; work: number; rest: number; rounds: number };
-
-const PRESETS: Preset[] = [
-  { key: 'tabata', name: 'TABATA', work: 20, rest: 10, rounds: 8 },
-  { key: 'hiit', name: 'HIIT 40/20', work: 40, rest: 20, rounds: 10 },
-  { key: 'emom', name: 'EMOM', work: 60, rest: 0, rounds: 10 },
-  { key: 'custom', name: 'CUSTOM', work: 30, rest: 15, rounds: 6 },
-];
-
 const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-function clock(totalSeconds: number) {
-  const s = Math.max(0, Math.round(totalSeconds));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}
-
-function timeOfDay(t: number) {
-  return new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
 
 export default function TrainScreen() {
   const insets = useSafeAreaInsets();
@@ -66,10 +48,6 @@ export default function TrainScreen() {
 
         <Reveal delay={180}>
           <ActivityCard onLog={() => setLogOpen(true)} />
-        </Reveal>
-
-        <Reveal delay={230}>
-          <IntervalCard />
         </Reveal>
 
         <View style={styles.footer}>
@@ -136,159 +114,6 @@ function SavedSessionsCard() {
   );
 }
 
-/* ---------------------------------- Interval timer ---------------------------------- */
-
-function IntervalCard() {
-  const [selected, setSelected] = useState('tabata');
-  const [custom, setCustom] = useState({ work: 30, rest: 15, rounds: 6 });
-  const preset = PRESETS.find((p) => p.key === selected)!;
-  const cfg = selected === 'custom' ? { ...preset, ...custom } : preset;
-  const total = cfg.rounds * cfg.work + (cfg.rounds - 1) * cfg.rest;
-
-  const start = () => {
-    haptic.medium();
-    router.push({
-      pathname: '/timer',
-      params: { work: cfg.work, rest: cfg.rest, rounds: cfg.rounds, name: cfg.name },
-    });
-  };
-
-  return (
-    <View style={[styles.card, styles.timerCard]}>
-      <LinearGradient
-        colors={[colors.yellow, colors.yellowDeep]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={StyleSheet.absoluteFill}
-      />
-      <Logo
-        width={260}
-        color="black"
-        style={{ position: 'absolute', right: -60, top: -20, opacity: 0.07, transform: [{ rotate: '-10deg' }] }}
-      />
-      <Text style={[styles.cardKicker, { color: 'rgba(0,0,0,0.55)' }]}>WORKOUT TOOL</Text>
-      <Text style={[styles.cardTitle, { color: colors.black, fontSize: 38, lineHeight: 46 }]}>INTERVAL{'\n'}TIMER</Text>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ marginHorizontal: -20, marginTop: 16 }}
-        contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}
-      >
-        {PRESETS.map((p) => {
-          const active = p.key === selected;
-          return (
-            <Pressable
-              key={p.key}
-              onPress={() => {
-                haptic.select();
-                setSelected(p.key);
-              }}
-              style={[styles.presetChip, active && styles.presetChipActive]}
-            >
-              <Text style={[styles.presetText, active && { color: colors.yellow }]}>{p.name}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {selected === 'custom' ? (
-        <View style={styles.customRow}>
-          <MiniStepper
-            label="WORK"
-            value={custom.work}
-            suffix="s"
-            onChange={(work) => setCustom((c) => ({ ...c, work }))}
-            step={5}
-            min={5}
-            max={300}
-          />
-          <MiniStepper
-            label="REST"
-            value={custom.rest}
-            suffix="s"
-            onChange={(rest) => setCustom((c) => ({ ...c, rest }))}
-            step={5}
-            min={0}
-            max={300}
-          />
-          <MiniStepper
-            label="ROUNDS"
-            value={custom.rounds}
-            onChange={(rounds) => setCustom((c) => ({ ...c, rounds }))}
-            step={1}
-            min={1}
-            max={50}
-          />
-        </View>
-      ) : (
-        <View style={styles.timerSpecs}>
-          <Spec value={`${cfg.work}s`} label="WORK" />
-          <Spec value={cfg.rest ? `${cfg.rest}s` : '\u2014'} label="REST" />
-          <Spec value={`${cfg.rounds}`} label="ROUNDS" />
-        </View>
-      )}
-
-      <PressableScale onPress={start} style={styles.startBtn} scaleTo={0.97}>
-        <Ionicons name="play" size={18} color={colors.yellow} />
-        <Text style={styles.startText}>START {'\u00B7'} {clock(total)}</Text>
-      </PressableScale>
-    </View>
-  );
-}
-
-function Spec({ value, label }: { value: string; label: string }) {
-  return (
-    <View style={{ flex: 1 }}>
-      <Text style={styles.specValue}>{value}</Text>
-      <Text style={styles.specLabel}>{label}</Text>
-    </View>
-  );
-}
-
-function MiniStepper({
-  label,
-  value,
-  suffix = '',
-  onChange,
-  step,
-  min,
-  max,
-}: {
-  label: string;
-  value: number;
-  suffix?: string;
-  onChange: (v: number) => void;
-  step: number;
-  min: number;
-  max: number;
-}) {
-  const change = (d: number) => {
-    const v = Math.min(max, Math.max(min, value + d));
-    if (v !== value) {
-      haptic.select();
-      onChange(v);
-    }
-  };
-  return (
-    <View style={styles.mini}>
-      <Text style={styles.specLabel}>{label}</Text>
-      <View style={styles.miniRow}>
-        <Pressable onPress={() => change(-step)} hitSlop={8} style={styles.miniBtn}>
-          <Ionicons name="remove" size={14} color={colors.yellow} />
-        </Pressable>
-        <Text style={styles.miniValue}>
-          {value}
-          {suffix}
-        </Text>
-        <Pressable onPress={() => change(step)} hitSlop={8} style={styles.miniBtn}>
-          <Ionicons name="add" size={14} color={colors.yellow} />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
 /* ------------------------------------- Activity ------------------------------------- */
 
 function ActivityCard({ onLog }: { onLog: () => void }) {
@@ -303,25 +128,41 @@ function ActivityCard({ onLog }: { onLog: () => void }) {
         kicker="THIS WEEK"
         title="ACTIVITY"
         right={
-          <View style={styles.streakPill}>
-            <Ionicons name="flame" size={13} color={colors.black} />
-            <Text style={styles.streakText}>{streak}</Text>
+          <View style={styles.headerActions}>
+            {workouts.length > 0 && (
+              <PressableScale
+                onPress={() => router.push('/activity')}
+                style={styles.seeAll}
+                scaleTo={0.94}
+                accessibilityLabel="See all activity"
+              >
+                <Text style={styles.seeAllText}>SEE ALL</Text>
+                <Ionicons name="chevron-forward" size={12} color={colors.yellow} />
+              </PressableScale>
+            )}
+            <View style={styles.streakWrap}>
+              <View style={styles.streakPill}>
+                <Ionicons name="flame" size={13} color={colors.black} />
+                <Text style={styles.streakText}>{streak}</Text>
+              </View>
+              <Text style={styles.streakCaption}>{streak === 1 ? 'DAY' : 'DAYS'}</Text>
+            </View>
           </View>
         }
       />
 
-      <View style={{ flexDirection: 'row', gap: 24, marginTop: 4 }}>
-        <View>
-          <Text style={styles.bigNumber}>
-            {weekMinutes}
-            <Text style={styles.bigUnit}> MIN</Text>
-          </Text>
+      <View style={styles.statRow}>
+        <View style={styles.stat}>
+          <Text style={styles.bigNumber}>{weekMinutes}</Text>
+          <Text style={styles.statLabel}>MINUTES</Text>
         </View>
-        <View>
+        <View style={styles.statRule} />
+        <View style={styles.stat}>
           <Text style={styles.bigNumber}>
             {activeDays}
-            <Text style={styles.bigUnit}>/7 DAYS</Text>
+            <Text style={styles.bigUnit}> /7</Text>
           </Text>
+          <Text style={styles.statLabel}>DAYS ACTIVE</Text>
         </View>
       </View>
 
@@ -329,7 +170,8 @@ function ActivityCard({ onLog }: { onLog: () => void }) {
         {week.map((d, i) => {
           const isToday = i === week.length - 1;
           return (
-            <View key={d.day} style={styles.barCol}>
+            <View key={d.day} style={[styles.barCol, isToday && styles.barColToday]}>
+              <Text style={[styles.barValue, isToday && { color: colors.yellow }]}>{d.minutes > 0 ? d.minutes : ' '}</Text>
               <View style={styles.barTrack}>
                 <Bar pct={d.minutes / max} highlight={isToday} />
               </View>
@@ -341,33 +183,17 @@ function ActivityCard({ onLog }: { onLog: () => void }) {
         })}
       </View>
 
-      {recent.length > 0 && (
-        <View style={{ marginTop: 18, gap: 8 }}>
-          {recent.map((w) => {
-            const t = WORKOUT_TYPES.find((x) => x.key === w.type)!;
-            return (
-              <View key={w.id} style={styles.recent}>
-                <View style={styles.recentIcon}>
-                  <Ionicons name={t.icon as keyof typeof Ionicons.glyphMap} size={16} color={colors.yellow} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.recentName}>{t.label}</Text>
-                  <Text style={styles.recentMeta}>
-                    {new Date(w.at).toLocaleDateString('en-US', { weekday: 'short' })} {'\u00B7'} {timeOfDay(w.at)}
-                  </Text>
-                </View>
-                <Text style={styles.recentMin}>{w.minutes} MIN</Text>
-                <Pressable
-                  onPress={() => { haptic.select(); removeWorkout(w.id); }}
-                  hitSlop={10}
-                  accessibilityLabel="Delete workout"
-                >
-                  <Ionicons name="close" size={16} color={colors.mutedDark} />
-                </Pressable>
-              </View>
-            );
-          })}
+      {recent.length > 0 ? (
+        <View style={styles.sessionBlock}>
+          <Text style={styles.metaLabel}>RECENT</Text>
+          <View style={{ gap: 8 }}>
+            {recent.map((workout) => (
+              <ActivitySession key={workout.id} workout={workout} onRemove={() => removeWorkout(workout.id)} />
+            ))}
+          </View>
         </View>
+      ) : (
+        <Text style={styles.emptyActivity}>Log a session and it will land here.</Text>
       )}
 
       <Button label="LOG WORKOUT" icon="add" onPress={onLog} style={{ marginTop: 18 }} />
@@ -376,11 +202,12 @@ function ActivityCard({ onLog }: { onLog: () => void }) {
 }
 
 function Bar({ pct, highlight }: { pct: number; highlight: boolean }) {
-  const h = useSharedValue(pct);
+  const target = highlight ? Math.max(pct, 0.08) : pct;
+  const h = useSharedValue(target);
   useEffect(() => {
-    h.value = withTiming(pct, { duration: 500, easing: Easing.out(Easing.cubic) });
-  }, [pct]);
-  const style = useAnimatedStyle(() => ({ height: `${Math.max(h.value, 0.03) * 100}%` }));
+    h.value = withTiming(target, { duration: 500, easing: Easing.out(Easing.cubic) });
+  }, [target]);
+  const style = useAnimatedStyle(() => ({ height: `${h.value * 100}%` }));
   return (
     <Animated.View
       style={[styles.bar, { backgroundColor: highlight ? colors.yellow : pct > 0 ? colors.white : colors.border }, style]}
@@ -390,23 +217,39 @@ function Bar({ pct, highlight }: { pct: number; highlight: boolean }) {
 
 /* ------------------------------------ Log sheet ------------------------------------- */
 
-const DURATIONS = [15, 30, 45, 60, 90];
+const DURATIONS = [15, 30, 45, 60];
 
 function LogWorkoutSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const insets = useSafeAreaInsets();
   const { logWorkout } = useFitness();
   const [type, setType] = useState<WorkoutType>('strength');
   const [minutes, setMinutes] = useState(45);
+  const [custom, setCustom] = useState('');
 
-  const save = () => {
-    logWorkout(type, minutes);
-    haptic.success();
+  const usingCustom = custom.trim().length > 0;
+  const customMinutes = Number(custom);
+  const resolved = usingCustom ? customMinutes : minutes;
+  const canSave = Number.isInteger(resolved) && resolved >= 1 && resolved <= 600;
+
+  const close = () => {
+    setCustom('');
     onClose();
   };
 
+  const save = () => {
+    if (!canSave) return;
+    logWorkout(type, resolved);
+    haptic.success();
+    close();
+  };
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.sheetWrap}
+      >
+      <Pressable style={styles.backdrop} onPress={close} />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.grabber} />
         <Text style={styles.cardKicker}>NICE WORK</Text>
@@ -439,12 +282,13 @@ function LogWorkoutSheet({ visible, onClose }: { visible: boolean; onClose: () =
         <Text style={[styles.metaLabel, { marginTop: 18 }]}>DURATION</Text>
         <View style={styles.durations}>
           {DURATIONS.map((m) => {
-            const active = m === minutes;
+            const active = !usingCustom && m === minutes;
             return (
               <Pressable
                 key={m}
                 onPress={() => {
                   haptic.select();
+                  setCustom('');
                   setMinutes(m);
                 }}
                 style={[styles.duration, active && styles.presetChipActive]}
@@ -456,8 +300,27 @@ function LogWorkoutSheet({ visible, onClose }: { visible: boolean; onClose: () =
           })}
         </View>
 
-        <Button label="SAVE WORKOUT" icon="checkmark" onPress={save} style={{ marginTop: 22 }} />
+        <View style={[styles.customDuration, usingCustom && styles.customDurationActive]}>
+          <TextInput
+            value={custom}
+            onChangeText={(value) => setCustom(value.replace(/\D/g, '').slice(0, 3))}
+            placeholder="Custom minutes"
+            placeholderTextColor={colors.mutedDark}
+            keyboardType="number-pad"
+            inputMode="numeric"
+            maxLength={3}
+            style={styles.customInput}
+            selectionColor={colors.yellow}
+            cursorColor={colors.yellow}
+            accessibilityLabel="Custom duration in minutes"
+          />
+          <Text style={[styles.durationUnit, usingCustom && { color: colors.yellow }]}>MIN</Text>
+        </View>
+        {usingCustom && !canSave && <Text style={styles.customHint}>Use 1 to 600 minutes.</Text>}
+
+        <Button label="SAVE WORKOUT" icon="checkmark" onPress={save} disabled={!canSave} style={{ marginTop: 22 }} />
       </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -490,52 +353,14 @@ const styles = StyleSheet.create({
   cardKicker: { fontFamily: fonts.bold, color: colors.yellow, fontSize: 10, letterSpacing: 2.5 },
   cardTitle: { fontFamily: fonts.display, color: colors.white, fontSize: 28, lineHeight: 36, marginTop: 2 },
   metaLabel: { fontFamily: fonts.bold, color: colors.muted, fontSize: 9, letterSpacing: 1.8 },
-  bigNumber: { fontFamily: fonts.display, color: colors.white, fontSize: 40, lineHeight: 50 },
-  bigUnit: { fontFamily: fonts.display, color: colors.mutedDark, fontSize: 18 },
+  bigNumber: { fontFamily: fonts.display, color: colors.white, fontSize: 40, lineHeight: 52 },
+  bigUnit: { fontFamily: fonts.display, color: colors.mutedDark, fontSize: 22 },
+  statRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  stat: { flex: 1 },
+  statLabel: { fontFamily: fonts.bold, color: colors.muted, fontSize: 10, letterSpacing: 1.8, marginTop: -2 },
+  statRule: { width: 1, height: 36, backgroundColor: colors.border, marginHorizontal: 16 },
 
-  timerCard: { borderWidth: 0, backgroundColor: colors.yellow },
-  presetChip: {
-    paddingHorizontal: 14,
-    height: 36,
-    borderRadius: radius.pill,
-    borderWidth: 1.5,
-    borderColor: 'rgba(0,0,0,0.25)',
-    justifyContent: 'center',
-  },
   presetChipActive: { backgroundColor: colors.black, borderColor: colors.black },
-  presetText: { fontFamily: fonts.black, color: colors.black, fontSize: 11, letterSpacing: 1.2 },
-  timerSpecs: { flexDirection: 'row', marginTop: 18 },
-  specValue: { fontFamily: fonts.display, color: colors.black, fontSize: 30, lineHeight: 38 },
-  specLabel: { fontFamily: fonts.black, color: 'rgba(0,0,0,0.5)', fontSize: 9, letterSpacing: 1.8 },
-  customRow: { flexDirection: 'row', gap: 8, marginTop: 18 },
-  mini: {
-    flex: 1,
-    padding: 10,
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(0,0,0,0.08)',
-    gap: 6,
-  },
-  miniRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  miniBtn: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: colors.black,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  miniValue: { fontFamily: fonts.display, color: colors.black, fontSize: 20, lineHeight: 26 },
-  startBtn: {
-    marginTop: 18,
-    height: 56,
-    borderRadius: radius.pill,
-    backgroundColor: colors.black,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  startText: { fontFamily: fonts.black, color: colors.yellow, fontSize: 14, letterSpacing: 1.5 },
 
   seeAll: {
     flexDirection: 'row',
@@ -550,6 +375,8 @@ const styles = StyleSheet.create({
   },
   seeAllText: { fontFamily: fonts.black, color: colors.yellow, fontSize: 10, letterSpacing: 1.5 },
 
+  headerActions: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  streakWrap: { alignItems: 'flex-end', gap: 4 },
   streakPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -560,31 +387,25 @@ const styles = StyleSheet.create({
     backgroundColor: colors.yellow,
   },
   streakText: { fontFamily: fonts.black, color: colors.black, fontSize: 13 },
-  chart: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, height: 120 },
-  barCol: { flex: 1, alignItems: 'center', gap: 8 },
-  barTrack: { flex: 1, width: 22, justifyContent: 'flex-end' },
-  bar: { width: '100%', borderRadius: 6 },
-  barLabel: { fontFamily: fonts.black, color: colors.mutedDark, fontSize: 10 },
-  recent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 12,
-    borderRadius: radius.md,
+  streakCaption: { fontFamily: fonts.bold, color: colors.muted, fontSize: 8, letterSpacing: 1.4 },
+  chart: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 18, height: 148, gap: 4 },
+  barCol: { flex: 1, alignItems: 'center', gap: 6, paddingTop: 6, borderRadius: 12 },
+  barColToday: { backgroundColor: 'rgba(254,219,0,0.08)' },
+  barValue: { fontFamily: fonts.black, color: colors.muted, fontSize: 9, letterSpacing: 0.4, height: 12 },
+  barTrack: {
+    flex: 1,
+    width: 18,
+    justifyContent: 'flex-end',
     backgroundColor: colors.surfaceHigh,
+    borderRadius: 7,
+    overflow: 'hidden',
   },
-  recentIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(254,219,0,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  recentName: { fontFamily: fonts.bold, color: colors.white, fontSize: 14 },
-  recentMeta: { fontFamily: fonts.medium, color: colors.muted, fontSize: 11, marginTop: 1 },
-  recentMin: { fontFamily: fonts.black, color: colors.white, fontSize: 12, letterSpacing: 1 },
+  bar: { width: '100%' },
+  barLabel: { fontFamily: fonts.black, color: colors.muted, fontSize: 10, marginBottom: 6 },
+  sessionBlock: { marginTop: 18, gap: 10 },
+  emptyActivity: { fontFamily: fonts.medium, color: colors.muted, fontSize: 13, marginTop: 18 },
 
+  sheetWrap: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
   sheet: {
     backgroundColor: colors.surface,
@@ -629,6 +450,20 @@ const styles = StyleSheet.create({
   },
   durationText: { fontFamily: fonts.display, color: colors.white, fontSize: 20, lineHeight: 26 },
   durationUnit: { fontFamily: fonts.black, color: colors.muted, fontSize: 8, letterSpacing: 1.2 },
+  customDuration: {
+    marginTop: 8,
+    height: 52,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.borderBright,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  customDurationActive: { borderColor: colors.yellow, backgroundColor: colors.black },
+  customInput: { flex: 1, fontFamily: fonts.bold, color: colors.white, fontSize: 16, paddingVertical: 0 },
+  customHint: { fontFamily: fonts.medium, color: colors.muted, fontSize: 11, marginTop: 6 },
 
   footer: { alignItems: 'center', gap: 10, marginTop: 26, paddingHorizontal: 40 },
   footerText: { fontFamily: fonts.medium, color: colors.mutedDark, fontSize: 11, textAlign: 'center', lineHeight: 16 },

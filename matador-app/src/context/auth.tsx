@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { savedPlans } from '@/services/workouts';
 
-type SignUpInput = { firstName: string; email: string; password: string; marketing: boolean };
+type SignUpInput = { email: string; password: string; marketing: boolean };
 
 type AuthContextValue = {
   session: Session | null;
@@ -63,12 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         return friendly(error);
       },
-      signUp: async ({ firstName, email, password, marketing }) => {
+      signUp: async ({ email, password, marketing }) => {
         if (!isSupabaseConfigured) return { error: NOT_CONFIGURED, needsConfirmation: false };
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { first_name: firstName, marketing_opt_in: marketing } },
+          options: { data: { marketing_opt_in: marketing } },
         });
         if (error) return { error: friendly(error), needsConfirmation: false };
         // With email confirmation on, an existing email comes back as a user with no identities.

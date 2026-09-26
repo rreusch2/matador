@@ -1,8 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react';
 
-export type WorkoutType = 'strength' | 'run' | 'hiit' | 'cycle' | 'yoga' | 'sport';
-export type Workout = { id: string; type: WorkoutType; minutes: number; at: number };
+import { useAuth } from '@/context/auth';
+import {
+  cacheKey,
+  deleteWorkout,
+  fetchWorkouts,
+  importLegacyWorkouts,
+  newWorkoutId,
+  parseStoredWorkouts,
+  saveWorkout,
+  type Workout,
+  type WorkoutSource,
+  type WorkoutType,
+} from '@/services/activity';
+
+export type { Workout, WorkoutSource, WorkoutType };
 
 type State = { loaded: boolean; workouts: Workout[] };
 
@@ -11,7 +24,11 @@ type Action =
   | { type: 'logWorkout'; entry: Workout }
   | { type: 'removeWorkout'; id: string };
 
-const STORAGE_KEY = 'matador.fitness.v1';
+export type LogWorkoutOptions = {
+  source?: WorkoutSource;
+  planId?: string | null;
+};
+
 const DAY = 24 * 60 * 60 * 1000;
 
 export const WORKOUT_TYPES: { key: WorkoutType; label: string; icon: string }[] = [
@@ -40,10 +57,10 @@ export function startOfDay(t: number) {
   return d.getTime();
 }
 
-const uid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+type PendingAdd = { workout: Workout; source: WorkoutSource; planId: string | null };
 
 type FitnessContext = State & {
-  logWorkout: (type: WorkoutType, minutes: number) => void;
+  logWorkout: (type: WorkoutType, minutes: number, options?: LogWorkoutOptions) => void;
   removeWorkout: (id: string) => void;
   /** Minutes per day for the last 7 days, oldest first; the last item is today. */
   week: { day: number; minutes: number }[];
@@ -54,26 +71,68 @@ type FitnessContext = State & {
 const Ctx = createContext<FitnessContext | null>(null);
 
 export function FitnessProvider({ children }: { children: ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
+  const userId = user?.id ?? null;
   const [state, dispatch] = useReducer(reducer, { loaded: false, workouts: [] });
-  const skipSave = useRef(true);
+  const userIdRef = useRef(userId);
+  const pendingAdds = useRef(new Map<string, PendingAdd>());
+  const pendingDeletes = useRef(new Set<string>());
+  userIdRef.current = userId;
 
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((raw) => {
-        const saved = raw ? (JSON.parse(raw) as { workouts?: Workout[] }) : {};
-        dispatch({ type: 'hydrate', workouts: saved.workouts ?? [] });
-      })
-      .catch(() => dispatch({ type: 'hydrate', workouts: [] }));
-  }, []);
+    if (authLoading) return;
+    let cancelled = false;
+    pendingAdds.current.clear();
+    pendingDeletes.current.clear();
 
-  useEffect(() => {
-    if (!state.loaded) return;
-    if (skipSave.current) {
-      skipSave.current = false;
+    if (!userId) {
+      dispatch({ type: 'hydrate', workouts: [] });
       return;
     }
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ workouts: state.workouts })).catch(() => {});
-  }, [state]);
+
+    const accountId = userId;
+    (async () => {
+      let showedCache = false;
+      try {
+        const cached = parseStoredWorkouts(await AsyncStorage.getItem(cacheKey(accountId)));
+        if (cancelled) return;
+        if (cached.length) {
+          dispatch({ type: 'hydrate', workouts: cached });
+          showedCache = true;
+        }
+
+        await importLegacyWorkouts(accountId);
+        let remote = await fetchWorkouts();
+        const remoteIds = new Set(remote.map((w) => w.id));
+        const missing = cached.filter((w) => !remoteIds.has(w.id) && !pendingDeletes.current.has(w.id));
+        for (const workout of missing) {
+          await saveWorkout(accountId, workout, 'manual', null);
+        }
+        if (missing.length) remote = await fetchWorkouts();
+        if (cancelled) return;
+
+        const deleted = pendingDeletes.current;
+        const extras = [...pendingAdds.current.values()]
+          .map((p) => p.workout)
+          .filter((w) => !deleted.has(w.id) && !remote.some((r) => r.id === w.id));
+        dispatch({
+          type: 'hydrate',
+          workouts: [...remote.filter((w) => !deleted.has(w.id)), ...extras],
+        });
+      } catch {
+        if (!cancelled && !showedCache) dispatch({ type: 'hydrate', workouts: [] });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, authLoading]);
+
+  useEffect(() => {
+    if (!state.loaded || !userId) return;
+    AsyncStorage.setItem(cacheKey(userId), JSON.stringify({ workouts: state.workouts })).catch(() => {});
+  }, [state, userId]);
 
   const value = useMemo<FitnessContext>(() => {
     const today = startOfDay(Date.now());
@@ -97,9 +156,26 @@ export function FitnessProvider({ children }: { children: ReactNode }) {
 
     return {
       ...state,
-      logWorkout: (type, minutes) =>
-        dispatch({ type: 'logWorkout', entry: { id: uid(), type, minutes, at: Date.now() } }),
-      removeWorkout: (id) => dispatch({ type: 'removeWorkout', id }),
+      logWorkout: (type, minutes, options) => {
+        const accountId = userIdRef.current;
+        if (!accountId) return;
+        const entry: Workout = { id: newWorkoutId(), type, minutes, at: Date.now() };
+        const source = options?.source ?? 'manual';
+        const planId = options?.planId ?? null;
+        pendingAdds.current.set(entry.id, { workout: entry, source, planId });
+        dispatch({ type: 'logWorkout', entry });
+        saveWorkout(accountId, entry, source, planId)
+          .then(() => pendingAdds.current.delete(entry.id))
+          .catch(() => {});
+      },
+      removeWorkout: (id) => {
+        pendingAdds.current.delete(id);
+        pendingDeletes.current.add(id);
+        dispatch({ type: 'removeWorkout', id });
+        deleteWorkout(id)
+          .then(() => pendingDeletes.current.delete(id))
+          .catch(() => {});
+      },
       week,
       weekMinutes: week.reduce((s, d) => s + d.minutes, 0),
       streak,

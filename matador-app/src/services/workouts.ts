@@ -104,10 +104,16 @@ export async function listPlans(limit = 20): Promise<WorkoutPlan[]> {
   return plans;
 }
 
-/** Marks a saved plan as completed. Best effort; the local log drives streaks. */
+/** Marks a saved plan as completed. Best effort; the account activity log drives streaks. */
 export async function markPlanCompleted(planId: string) {
   savedPlans.update(planId, { completedAt: new Date().toISOString() });
   await api(`/v1/workouts/plans/${planId}/complete`, { method: 'POST' }).catch(() => {});
+}
+
+/** Deletes a saved plan from workout_plans and drops it from the local library. */
+export async function deletePlan(planId: string) {
+  await api(`/v1/workouts/plans/${planId}`, { method: 'DELETE' });
+  savedPlans.remove(planId);
 }
 
 /** Hands a plan (fresh from the builder or opened from history) to the plan screen. */
@@ -133,6 +139,8 @@ const STALE_MS = 60_000;
 let saved: SavedPlansState = { plans: null, loading: false, error: null };
 let fetchedAt = 0;
 let generation = 0;
+/** Ids deleted this session, so a refresh that started before the delete cannot put them back. */
+const removedIds = new Set<string>();
 const listeners = new Set<() => void>();
 
 function setSaved(next: Partial<SavedPlansState>) {
@@ -155,7 +163,7 @@ export const savedPlans = {
     const gen = generation;
     setSaved({ loading: true, error: null });
     try {
-      const plans = await listPlans(HISTORY_LIMIT);
+      const plans = (await listPlans(HISTORY_LIMIT)).filter((p) => !removedIds.has(p.id));
       if (gen !== generation) return;
       fetchedAt = Date.now();
       setSaved({ plans, loading: false });
@@ -171,10 +179,16 @@ export const savedPlans = {
     if (!saved.plans) return;
     setSaved({ plans: saved.plans.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
   },
+  remove(id: string) {
+    removedIds.add(id);
+    if (!saved.plans) return;
+    setSaved({ plans: saved.plans.filter((p) => p.id !== id) });
+  },
   /** Called on sign-out so the next account never sees these sessions. */
   clear() {
     generation++;
     fetchedAt = 0;
+    removedIds.clear();
     setSaved({ plans: null, loading: false, error: null });
   },
 };

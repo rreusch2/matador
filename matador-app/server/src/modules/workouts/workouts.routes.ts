@@ -6,7 +6,7 @@ import { authed, requireAuth } from '../../middleware/auth.js';
 import { userBurstLimiter } from '../../middleware/rateLimit.js';
 import { validateBody } from '../../middleware/validate.js';
 import { generateInput, type GenerateInput } from './workouts.schema.js';
-import { completePlan, generatePlan, listPlans } from './workouts.service.js';
+import { completePlan, deletePlan, generatePlan, listPlans } from './workouts.service.js';
 
 export const workoutsRouter = Router();
 
@@ -32,5 +32,14 @@ workoutsRouter.post('/plans/:id/complete', async (req, res) => {
   const id = z.uuid().safeParse(req.params.id);
   if (!id.success) throw badRequest('Invalid session id.');
   await completePlan(db, id.data);
+  res.status(204).end();
+});
+
+/** DELETE /v1/workouts/plans/:id - remove a saved session. */
+workoutsRouter.delete('/plans/:id', async (req, res) => {
+  const { db } = authed(req);
+  const id = z.uuid().safeParse(req.params.id);
+  if (!id.success) throw badRequest('Invalid session id.');
+  await deletePlan(db, id.data);
   res.status(204).end();
 });

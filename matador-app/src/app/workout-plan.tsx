@@ -57,7 +57,7 @@ export default function WorkoutPlanScreen() {
   };
 
   const log = () => {
-    logWorkout(plan.logAs, plan.minutes);
+    logWorkout(plan.logAs, plan.minutes, { source: 'plan', planId: plan.id });
     markPlanCompleted(plan.id);
     setLogged(true);
     haptic.success();

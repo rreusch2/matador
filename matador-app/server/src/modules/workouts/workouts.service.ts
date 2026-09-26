@@ -170,3 +170,9 @@ export async function completePlan(db: SupabaseClient, planId: string): Promise<
   if (error) throw new HttpError(500, 'db_error', 'Could not update your session.');
   if (!data?.length) throw notFound('Session not found.');
 }
+
+export async function deletePlan(db: SupabaseClient, planId: string): Promise<void> {
+  const { data, error } = await db.from('workout_plans').delete().eq('id', planId).select('id');
+  if (error) throw new HttpError(500, 'db_error', 'Could not delete your session.');
+  if (!data?.length) throw notFound('Session not found.');
+}
