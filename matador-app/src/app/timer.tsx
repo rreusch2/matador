@@ -12,7 +12,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DemoVideo, videoHeight, youtubeId } from '@/components/DemoVideo';
 import { Button, PressableScale } from '@/components/ui';
 import { colors, fonts, radius } from '@/constants/theme';
 import { useFitness } from '@/context/fitness';
@@ -75,8 +74,6 @@ export default function TimerScreen() {
   const phase = phases[index];
   const look = LOOK[phase.kind];
   const manual = phase.kind === 'reps';
-  const showDemo = phase.kind !== 'prep' && !!youtubeId(phase.demo);
-  const demoH = showDemo ? videoHeight(width) + 14 : 0;
   const totalSeconds = phases.reduce((sum, p) => sum + p.seconds, 0);
 
   const startFill = (fromMs: number, durationMs: number) => {
@@ -175,12 +172,12 @@ export default function TimerScreen() {
   const nextLabel = next ? (next.kind === 'rest' ? 'REST' : next.title) : null;
 
   const content = (ink: string, dim: string) => (
-    <View style={[styles.content, { width, height, paddingTop: insets.top + 70 + demoH }]}>
+    <View style={[styles.content, { width, height, paddingTop: insets.top + 70 }]}>
       <Text style={[styles.top, { color: dim }]} numberOfLines={1}>
         {phase.top}
       </Text>
       <Text
-        style={[styles.title, showDemo && styles.titleWithVideo, { color: ink }]}
+        style={[styles.title, { color: ink }]}
         numberOfLines={2}
         adjustsFontSizeToFit
         minimumFontScale={0.6}
@@ -189,17 +186,13 @@ export default function TimerScreen() {
       </Text>
       {manual ? (
         <>
-          <Text style={[styles.reps, showDemo && styles.repsWithVideo, { color: ink }]} numberOfLines={1} adjustsFontSizeToFit>
+          <Text style={[styles.reps, { color: ink }]} numberOfLines={1} adjustsFontSizeToFit>
             {phase.reps}
           </Text>
           {PLAIN_REPS.test(phase.reps) && <Text style={[styles.repsLabel, { color: dim }]}>REPS</Text>}
         </>
       ) : (
-        <Text
-          style={[styles.clock, showDemo && styles.clockWithVideo, { color: ink }]}
-          adjustsFontSizeToFit
-          numberOfLines={1}
-        >
+        <Text style={[styles.clock, { color: ink }]} adjustsFontSizeToFit numberOfLines={1}>
           {phase.seconds >= 60 ? formatClock(left / 1000) : Math.ceil(left / 1000)}
         </Text>
       )}
@@ -264,12 +257,6 @@ export default function TimerScreen() {
         </View>
       </Animated.View>
 
-      {showDemo && (
-        <View style={[styles.demoWrap, { top: insets.top + 62 }]} pointerEvents="none">
-          <DemoVideo key={phase.demo ?? 'demo'} url={phase.demo} width={width} playing />
-        </View>
-      )}
-
       <View style={[styles.topBar, { top: insets.top + 12 }]}>
         <PressableScale onPress={() => router.back()} style={styles.roundBtn} scaleTo={0.9} accessibilityLabel="Close timer">
           <Ionicons name="close" size={22} color={colors.white} />
@@ -307,12 +294,8 @@ const styles = StyleSheet.create({
   content: { alignItems: 'center', paddingHorizontal: 24 },
   top: { fontFamily: fonts.black, fontSize: 12, letterSpacing: 3 },
   title: { fontFamily: fonts.display, fontSize: 44, lineHeight: 54, marginTop: 18, letterSpacing: 1, textAlign: 'center' },
-  titleWithVideo: { fontSize: 32, lineHeight: 40, marginTop: 10 },
   clock: { fontFamily: fonts.display, fontSize: 160, lineHeight: 210, marginTop: 4 },
-  clockWithVideo: { fontSize: 110, lineHeight: 140 },
   reps: { fontFamily: fonts.display, fontSize: 112, lineHeight: 150, marginTop: 4 },
-  repsWithVideo: { fontSize: 84, lineHeight: 108 },
-  demoWrap: { position: 'absolute', left: 0, right: 0, zIndex: 4 },
   repsLabel: { fontFamily: fonts.black, fontSize: 13, letterSpacing: 3, marginTop: -4, marginBottom: 8 },
   counter: { fontFamily: fonts.black, fontSize: 15, letterSpacing: 3 },
   cue: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 12 },
@@ -322,7 +305,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 20,
     right: 20,
-    zIndex: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',

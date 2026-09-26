@@ -4,18 +4,26 @@ import { env } from '../../config/env.js';
 import { HttpError, notFound, tooMany } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { grokJson } from '../../lib/xai.js';
-import { catalogBySlug, loadCatalog } from './catalog.js';
+import { loadCatalog } from '../exercises/exercises.catalog.js';
+import { MIN_MAIN_POOL, buildLibrary, resolvePlan, type Library } from '../exercises/exercises.library.js';
 import { SYSTEM_PROMPT, buildUserPrompt } from './workouts.prompt.js';
 import {
   PLAN_JSON_SCHEMA,
   sanitizePlan,
   type GenerateInput,
+  type Move,
   type PlanBody,
   type WorkoutPlan,
   type WorkoutPrefs,
 } from './workouts.schema.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Without a library there is nothing to resolve refs against, so any the model invented are cleared. */
+function stripIds(plan: PlanBody): Pick<PlanBody, 'warmup' | 'main' | 'finisher' | 'cooldown'> {
+  const clear = (moves: Move[]) => moves.map((m) => ({ ...m, exerciseId: null, videoId: null }));
+  return { warmup: clear(plan.warmup), main: clear(plan.main), finisher: clear(plan.finisher), cooldown: clear(plan.cooldown) };
+}
 
 type PlanRow = {
   id: string;
@@ -64,20 +72,37 @@ async function assertUnderDailyLimit(db: SupabaseClient, userId: string) {
   }
 }
 
+/** The request's exercise shortlist, or null to fall back to free-text exercises. */
+async function libraryFor(input: GenerateInput): Promise<Library | null> {
+  try {
+    const library = buildLibrary(await loadCatalog(), input);
+    return library.main.length >= MIN_MAIN_POOL ? library : null;
+  } catch (err) {
+    logger.warn({ err }, 'exercise catalog unavailable, generating without it');
+    return null;
+  }
+}
+
 export async function generatePlan(db: SupabaseClient, userId: string, input: GenerateInput): Promise<WorkoutPlan> {
   await assertUnderDailyLimit(db, userId);
 
-  const catalog = await loadCatalog(db, input);
-  const lookup = catalogBySlug(catalog);
-  const request = { system: SYSTEM_PROMPT, user: buildUserPrompt(input, catalog), schema: PLAN_JSON_SCHEMA };
+  const library = await libraryFor(input);
+  const strict = input.goal !== 'mobility';
+  const request = { system: SYSTEM_PROMPT, user: buildUserPrompt(input, library), schema: PLAN_JSON_SCHEMA };
+  const parse = (data: unknown) => {
+    const plan = sanitizePlan(data);
+    if (!plan) return null;
+    if (library) return resolvePlan(plan, library, strict);
+    return { ...plan, ...stripIds(plan) };
+  };
 
-  // One retry if the output fails validation or leaves the catalog.
+  // One retry if the output fails validation.
   let result = await grokJson(request);
-  let plan = sanitizePlan(result.data, lookup);
+  let plan = parse(result.data);
   if (!plan) {
     logger.warn('plan failed validation, retrying');
     result = await grokJson(request);
-    plan = sanitizePlan(result.data, lookup);
+    plan = parse(result.data);
   }
   if (!plan) throw new HttpError(502, 'ai_failed', 'Could not build your workout. Please try again.');
 
@@ -108,8 +133,18 @@ export async function generatePlan(db: SupabaseClient, userId: string, input: Ge
     throw new HttpError(500, 'db_error', 'Your workout was built but could not be saved. Please try again.');
   }
 
+  const moves = [...plan.warmup, ...plan.main, ...plan.finisher, ...plan.cooldown];
   logger.info(
-    { userId, planId: data.id, model: result.model, ms: result.latencyMs, tokens: result.tokens },
+    {
+      userId,
+      planId: data.id,
+      model: result.model,
+      ms: result.latencyMs,
+      tokens: result.tokens,
+      library: library ? library.main.length + library.prep.length : 0,
+      videos: moves.filter((m) => m.videoId).length,
+      moves: moves.length,
+    },
     'workout generated'
   );
   return toPlan(data);

@@ -64,7 +64,7 @@ async function run(model: string, effort: string | null, caseName: keyof typeof 
   const content = json.choices?.[0]?.message?.content ?? '';
   let plan: ReturnType<typeof sanitizePlan> = null;
   try {
-    plan = sanitizePlan(JSON.parse(content), { slugs: new Map(), names: new Map() });
+    plan = sanitizePlan(JSON.parse(content));
   } catch {}
   const u = json.usage ?? {};
   console.log(

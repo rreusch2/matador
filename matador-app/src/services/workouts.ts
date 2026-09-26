@@ -17,9 +17,6 @@ export type WorkoutPrefs = {
 
 export type Move = {
   name: string;
-  slug?: string;
-  /** YouTube demo from the exercise catalog. */
-  demo?: string | null;
   /** null for flows done once (warm-up / cool-down). */
   sets: number | null;
   /** "8-10", "30s", "10/side"... */

@@ -254,7 +254,6 @@ function MoveRow({ move, number, accent, delay }: { move: Move; number?: number;
       <View style={{ flex: 1 }}>
         <View style={styles.rowTop}>
           <Text style={styles.rowName}>{move.name}</Text>
-          {!!move.demo && <Ionicons name="play-circle" size={14} color={colors.yellow} />}
           <Text style={[styles.dose, number ? styles.doseMain : null]}>{prescription}</Text>
         </View>
         {(!!move.cue || !!move.rest) && (
