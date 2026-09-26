@@ -13,7 +13,7 @@ const schema = z.object({
   SUPABASE_KEY: z.string().min(20),
 
   XAI_API_KEY: z.string().min(10),
-  XAI_MODEL: z.string().default('grok-4.3'),
+  XAI_MODEL: z.string().default('grok-4.20-0309-non-reasoning'),
   XAI_REASONING_EFFORT: z.enum(['none', 'low', 'medium', 'high', '']).default('low'),
   XAI_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
 

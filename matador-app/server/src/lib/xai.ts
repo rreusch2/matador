@@ -4,6 +4,9 @@ import { logger } from './logger.js';
 
 const URL = 'https://api.x.ai/v1/chat/completions';
 
+/** These models reject reasoning_effort outright. */
+const NON_REASONING = /non-reasoning/i;
+
 type Message = { role: 'system' | 'user' | 'assistant'; content: string };
 
 type JsonRequest = {
@@ -31,7 +34,9 @@ export async function grokJson(req: JsonRequest, withEffort = true): Promise<Jso
     response_format: { type: 'json_schema', json_schema: { ...req.schema, strict: true } },
     max_tokens: req.maxTokens ?? 3000,
   };
-  if (withEffort && env.XAI_REASONING_EFFORT) body.reasoning_effort = env.XAI_REASONING_EFFORT;
+  if (withEffort && env.XAI_REASONING_EFFORT && !NON_REASONING.test(env.XAI_MODEL)) {
+    body.reasoning_effort = env.XAI_REASONING_EFFORT;
+  }
 
   const started = Date.now();
   let res: Response;
