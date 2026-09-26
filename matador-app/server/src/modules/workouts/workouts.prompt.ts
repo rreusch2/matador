@@ -52,7 +52,7 @@ PROGRAMMING RULES
 
 EXERCISE LIBRARY
 - When the request includes an EXERCISE LIBRARY, every main and finisher exercise MUST come from it. Set exerciseId to that line's id (e.g. "e12") and copy its name exactly. Never invent an id.
-- The library is a pre-filtered shortlist that already matches the equipment and level. Choose like a coach: the right tool for the goal, a balanced mix of movement patterns, fundamental and well-known variations over novelty, and nothing redundant.
+- The library is a pre-filtered shortlist that already matches the equipment and level. Build the session from exercises a typical person already knows: squat, hinge, push, pull, lunge, plank and their straightforward variations. Use at most one less common exercise in the whole session.
 - Warm-up and cool-down: use an id from the WARM-UP AND COOL-DOWN OPTIONS or the library when one fits. Otherwise set exerciseId to null and write a standard name (stretches and breathing drills are usually not listed).
 - For the mobility goal, use library moves where they fit and null exerciseId otherwise.
 - With no library in the request, set exerciseId to null for every move.

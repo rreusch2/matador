@@ -81,8 +81,9 @@ export default function TimerScreen() {
 
   const videoId = phase.videoId && !failedVideos.has(phase.videoId) ? phase.videoId : null;
   const hasVideo = !!videoId;
-  const videoW = Math.min(width - 48, 420);
-  const videoH = Math.round((videoW * 9) / 16);
+  // YouTube falls back to its own play button when the player is under 200px tall.
+  const videoW = Math.min(width - 28, 480);
+  const videoH = Math.max(204, Math.round((videoW * 9) / 16));
   const showCue = !!phase.cue && (!hasVideo || height >= 800);
 
   const startFill = (fromMs: number, durationMs: number) => {

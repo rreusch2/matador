@@ -4,34 +4,60 @@ import { StyleSheet, View } from 'react-native';
 import { radius } from '@/constants/theme';
 import type { ExerciseVideoProps } from './ExerciseVideo';
 
+function send(frame: HTMLIFrameElement | null, func: string, args: number[] = []) {
+  frame?.contentWindow?.postMessage(JSON.stringify({ event: 'command', func, args }), '*');
+}
+
+/** Same demo on web: muted, looping, and cropped so the YouTube frame stays hidden. */
 export function ExerciseVideo({ videoId, width, height, play }: ExerciseVideoProps) {
   const frame = useRef<HTMLIFrameElement>(null);
+  const id = videoId.replace(/[^A-Za-z0-9_-]/g, '');
 
   useEffect(() => {
-    const command = { event: 'command', func: play ? 'playVideo' : 'pauseVideo', args: [] };
-    frame.current?.contentWindow?.postMessage(JSON.stringify(command), '*');
-  }, [play]);
+    const silence = () => {
+      send(frame.current, 'mute');
+      send(frame.current, 'setVolume', [0]);
+    };
+    silence();
+    send(frame.current, play ? 'playVideo' : 'pauseVideo');
+    const timer = setInterval(silence, 500);
+    return () => clearInterval(timer);
+  }, [play, videoId]);
 
-  // YouTube only loops a single clip when it is also passed as the playlist.
   const src =
-    `https://www.youtube-nocookie.com/embed/${videoId}` +
-    `?autoplay=1&mute=1&loop=1&playlist=${videoId}&playsinline=1&rel=0&controls=0&iv_load_policy=3&enablejsapi=1`;
+    `https://www.youtube-nocookie.com/embed/${id}` +
+    '?autoplay=1&mute=1&loop=1&playlist=' +
+    id +
+    '&playsinline=1&controls=0&rel=0&modestbranding=1&fs=0&disablekb=1&iv_load_policy=3&cc_load_policy=0&enablejsapi=1';
 
   return (
-    <View style={[styles.frame, { width, height }]}>
+    <View style={[styles.frame, { width, height }]} pointerEvents="none">
       <iframe
         ref={frame}
         src={src}
-        width={width}
-        height={height}
         title="Exercise demo"
-        allow="autoplay; encrypted-media; picture-in-picture"
-        style={{ border: 0, display: 'block' }}
+        allow="autoplay; encrypted-media"
+        referrerPolicy="strict-origin-when-cross-origin"
+        style={{
+          position: 'absolute',
+          top: '-30%',
+          left: '-4%',
+          width: '108%',
+          height: '160%',
+          border: 0,
+          pointerEvents: 'none',
+        }}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  frame: { borderRadius: radius.md, overflow: 'hidden', backgroundColor: '#111111' },
+  frame: {
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    backgroundColor: '#0B0B0B',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+  },
 });
