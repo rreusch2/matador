@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Easing,
@@ -15,18 +15,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button, PressableScale } from '@/components/ui';
 import { colors, fonts, radius } from '@/constants/theme';
 import { useFitness } from '@/context/fitness';
+import { buildIntervalPhases, buildSessionPhases, type Phase } from '@/services/session';
+import { markPlanCompleted, planStore } from '@/services/workouts';
 import { haptic } from '@/utils/haptics';
 
-type Kind = 'prep' | 'work' | 'rest';
-type Phase = { kind: Kind; seconds: number; round: number };
-
-const PREP_SECONDS = 5;
-
-const LOOK: Record<Kind, { label: string; fill: string; ink: string }> = {
-  prep: { label: 'GET READY', fill: colors.white, ink: colors.black },
-  work: { label: 'WORK', fill: colors.yellow, ink: colors.black },
-  rest: { label: 'REST', fill: colors.blue, ink: colors.white },
+const LOOK: Record<Phase['kind'], { fill: string; ink: string }> = {
+  prep: { fill: colors.white, ink: colors.black },
+  work: { fill: colors.yellow, ink: colors.black },
+  rest: { fill: colors.blue, ink: colors.white },
+  reps: { fill: colors.yellow, ink: colors.black },
 };
+
+const PLAIN_REPS = /^\d+(\s*-\s*\d+)?$/;
 
 function formatClock(totalSeconds: number) {
   const s = Math.max(0, Math.round(totalSeconds));
@@ -38,21 +38,26 @@ export default function TimerScreen() {
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
   const { logWorkout } = useFitness();
-  const params = useLocalSearchParams<{ work?: string; rest?: string; rounds?: string; name?: string }>();
+  const params = useLocalSearchParams<{
+    mode?: string;
+    work?: string;
+    rest?: string;
+    rounds?: string;
+    name?: string;
+  }>();
+
+  const session = params.mode === 'session';
+  const [plan] = useState(() => (session ? planStore.get() : null));
+
   const work = Math.max(5, Number(params.work) || 20);
   const rest = Math.max(0, Number(params.rest) || 0);
   const rounds = Math.max(1, Number(params.rounds) || 8);
   const name = params.name ?? 'INTERVALS';
 
-  const phases = useMemo<Phase[]>(() => {
-    const list: Phase[] = [{ kind: 'prep', seconds: PREP_SECONDS, round: 1 }];
-    for (let r = 1; r <= rounds; r++) {
-      list.push({ kind: 'work', seconds: work, round: r });
-      if (rest > 0 && r < rounds) list.push({ kind: 'rest', seconds: rest, round: r });
-    }
-    return list;
-  }, [work, rest, rounds]);
-  const totalSeconds = rounds * work + (rounds - 1) * rest;
+  const phases = useMemo<Phase[]>(
+    () => (plan ? buildSessionPhases(plan) : buildIntervalPhases(name, work, rest, rounds)),
+    [plan, name, work, rest, rounds]
+  );
 
   const [index, setIndex] = useState(0);
   const [left, setLeft] = useState(phases[0].seconds * 1000);
@@ -68,6 +73,8 @@ export default function TimerScreen() {
 
   const phase = phases[index];
   const look = LOOK[phase.kind];
+  const manual = phase.kind === 'reps';
+  const totalSeconds = phases.reduce((sum, p) => sum + p.seconds, 0);
 
   const startFill = (fromMs: number, durationMs: number) => {
     cancelAnimation(fill);
@@ -79,8 +86,35 @@ export default function TimerScreen() {
     startFill(phases[0].seconds * 1000, phases[0].seconds * 1000);
   }, []);
 
+  /** Moves to the next phase. `carryMs` is the overshoot from the tick that triggered it. */
+  const advance = useCallback(
+    (carryMs = 0) => {
+      const next = indexRef.current + 1;
+      if (next >= phases.length) {
+        setDone(true);
+        setLeft(0);
+        haptic.success();
+        return;
+      }
+      const ms = phases[next].seconds * 1000;
+      indexRef.current = next;
+      phaseEnd.current = Date.now() + ms + carryMs;
+      lastBeep.current = -1;
+      setIndex(next);
+      setLeft(ms);
+      if (ms > 0) startFill(ms, ms);
+      else {
+        cancelAnimation(fill);
+        fill.value = 0;
+      }
+      if (phases[next].kind === 'rest') haptic.medium();
+      else haptic.heavy();
+    },
+    [phases]
+  );
+
   useEffect(() => {
-    if (paused || done) return;
+    if (paused || done || manual) return;
     const id = setInterval(() => {
       const remaining = phaseEnd.current - Date.now();
       if (remaining > 0) {
@@ -92,25 +126,10 @@ export default function TimerScreen() {
         }
         return;
       }
-      const next = indexRef.current + 1;
-      if (next >= phases.length) {
-        setDone(true);
-        setLeft(0);
-        haptic.success();
-        return;
-      }
-      const ms = phases[next].seconds * 1000;
-      indexRef.current = next;
-      phaseEnd.current = Date.now() + ms + remaining;
-      lastBeep.current = -1;
-      setIndex(next);
-      setLeft(ms);
-      startFill(ms, ms);
-      if (phases[next].kind === 'work') haptic.heavy();
-      else haptic.medium();
+      advance(remaining);
     }, 100);
     return () => clearInterval(id);
-  }, [paused, done, phases]);
+  }, [paused, done, manual, advance]);
 
   const togglePause = () => {
     if (paused) {
@@ -125,6 +144,10 @@ export default function TimerScreen() {
   };
 
   const skip = () => {
+    if (manual) {
+      advance();
+      return;
+    }
     if (paused) {
       pausedLeft.current = 0;
       togglePause();
@@ -133,31 +156,69 @@ export default function TimerScreen() {
   };
 
   const saveWorkout = () => {
-    logWorkout('hiit', Math.max(1, Math.round(totalSeconds / 60)));
+    if (plan) {
+      logWorkout(plan.logAs, plan.minutes);
+      markPlanCompleted(plan.id);
+    } else {
+      logWorkout('hiit', Math.max(1, Math.round(totalSeconds / 60)));
+    }
     setLogged(true);
     haptic.success();
   };
 
   const fillStyle = useAnimatedStyle(() => ({ height: fill.value * height }));
 
-  const nextPhase = phases[index + 1];
+  const next = phases[index + 1];
+  const nextLabel = next ? (next.kind === 'rest' ? 'REST' : next.title) : null;
+
   const content = (ink: string, dim: string) => (
     <View style={[styles.content, { width, height, paddingTop: insets.top + 70 }]}>
-      <Text style={[styles.name, { color: dim }]}>{name}</Text>
-      <Text style={[styles.phase, { color: ink }]}>{look.label}</Text>
-      <Text style={[styles.clock, { color: ink }]} adjustsFontSizeToFit numberOfLines={1}>
-        {phase.seconds >= 60 ? formatClock(left / 1000) : Math.ceil(left / 1000)}
+      <Text style={[styles.top, { color: dim }]} numberOfLines={1}>
+        {phase.top}
       </Text>
-      <Text style={[styles.round, { color: ink }]}>
-        ROUND {phase.round} / {rounds}
+      <Text
+        style={[styles.title, { color: ink }]}
+        numberOfLines={2}
+        adjustsFontSizeToFit
+        minimumFontScale={0.6}
+      >
+        {phase.title}
       </Text>
-      {nextPhase && (
-        <Text style={[styles.next, { color: dim }]}>
-          NEXT {'\u00B7'} {LOOK[nextPhase.kind].label} {nextPhase.seconds}s
+      {manual ? (
+        <>
+          <Text style={[styles.reps, { color: ink }]} numberOfLines={1} adjustsFontSizeToFit>
+            {phase.reps}
+          </Text>
+          {PLAIN_REPS.test(phase.reps) && <Text style={[styles.repsLabel, { color: dim }]}>REPS</Text>}
+        </>
+      ) : (
+        <Text style={[styles.clock, { color: ink }]} adjustsFontSizeToFit numberOfLines={1}>
+          {phase.seconds >= 60 ? formatClock(left / 1000) : Math.ceil(left / 1000)}
+        </Text>
+      )}
+      <Text style={[styles.counter, { color: ink }]}>{phase.counter}</Text>
+      {!!phase.cue && (
+        <Text style={[styles.cue, { color: dim }]} numberOfLines={2}>
+          {phase.cue}
+        </Text>
+      )}
+      {nextLabel && (
+        <Text style={[styles.next, { color: dim }]} numberOfLines={1}>
+          NEXT {'\u00B7'} {nextLabel}
+          {next && next.seconds > 0 ? ` ${next.seconds}s` : ''}
         </Text>
       )}
     </View>
   );
+
+  if (session && !plan) {
+    return (
+      <View style={[styles.screen, styles.doneWrap, { paddingTop: insets.top + 60, paddingBottom: insets.bottom + 30 }]}>
+        <Text style={styles.doneSub}>No session loaded. Open a workout and start it again.</Text>
+        <Button label="CLOSE" variant="outline" onPress={() => router.back()} style={{ alignSelf: 'stretch' }} />
+      </View>
+    );
+  }
 
   if (done) {
     return (
@@ -168,7 +229,9 @@ export default function TimerScreen() {
           </View>
           <Text style={styles.doneTitle}>DONE.</Text>
           <Text style={styles.doneSub}>
-            {name} {'\u00B7'} {rounds} rounds {'\u00B7'} {formatClock(totalSeconds)}
+            {plan
+              ? `${plan.title} \u00B7 ${plan.main.length} exercises \u00B7 ${plan.minutes} min`
+              : `${name} \u00B7 ${rounds} rounds \u00B7 ${formatClock(totalSeconds)}`}
           </Text>
         </View>
         <View style={{ gap: 12, alignSelf: 'stretch' }}>
@@ -199,18 +262,29 @@ export default function TimerScreen() {
           <Ionicons name="close" size={22} color={colors.white} />
         </PressableScale>
         <View style={styles.totalPill}>
-          <Text style={styles.totalText}>{formatClock(totalSeconds)} TOTAL</Text>
+          <Text style={styles.totalText}>
+            {plan ? `${plan.minutes} MIN SESSION` : `${formatClock(totalSeconds)} TOTAL`}
+          </Text>
         </View>
       </View>
 
-      <View style={[styles.controls, { bottom: insets.bottom + 34 }]}>
-        <PressableScale onPress={togglePause} style={styles.bigBtn} scaleTo={0.92} accessibilityLabel={paused ? 'Resume' : 'Pause'}>
-          <Ionicons name={paused ? 'play' : 'pause'} size={30} color={colors.white} />
-        </PressableScale>
-        <PressableScale onPress={skip} style={styles.roundBtn} scaleTo={0.9} accessibilityLabel="Skip phase">
-          <Ionicons name="play-skip-forward" size={20} color={colors.white} />
-        </PressableScale>
-      </View>
+      {manual ? (
+        <View style={[styles.controlsWide, { bottom: insets.bottom + 34 }]}>
+          <PressableScale onPress={() => advance()} style={styles.setDone} scaleTo={0.97} accessibilityLabel="Set complete">
+            <Ionicons name="checkmark" size={22} color={colors.black} />
+            <Text style={styles.setDoneText}>SET COMPLETE</Text>
+          </PressableScale>
+        </View>
+      ) : (
+        <View style={[styles.controls, { bottom: insets.bottom + 34 }]}>
+          <PressableScale onPress={togglePause} style={styles.bigBtn} scaleTo={0.92} accessibilityLabel={paused ? 'Resume' : 'Pause'}>
+            <Ionicons name={paused ? 'play' : 'pause'} size={30} color={colors.white} />
+          </PressableScale>
+          <PressableScale onPress={skip} style={styles.roundBtn} scaleTo={0.9} accessibilityLabel="Skip phase">
+            <Ionicons name="play-skip-forward" size={20} color={colors.white} />
+          </PressableScale>
+        </View>
+      )}
     </View>
   );
 }
@@ -218,10 +292,13 @@ export default function TimerScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.black, overflow: 'hidden' },
   content: { alignItems: 'center', paddingHorizontal: 24 },
-  name: { fontFamily: fonts.black, fontSize: 12, letterSpacing: 3 },
-  phase: { fontFamily: fonts.display, fontSize: 44, lineHeight: 54, marginTop: 18, letterSpacing: 2 },
-  clock: { fontFamily: fonts.display, fontSize: 200, lineHeight: 236, marginTop: 4 },
-  round: { fontFamily: fonts.black, fontSize: 15, letterSpacing: 3 },
+  top: { fontFamily: fonts.black, fontSize: 12, letterSpacing: 3 },
+  title: { fontFamily: fonts.display, fontSize: 44, lineHeight: 54, marginTop: 18, letterSpacing: 1, textAlign: 'center' },
+  clock: { fontFamily: fonts.display, fontSize: 170, lineHeight: 200, marginTop: 4 },
+  reps: { fontFamily: fonts.display, fontSize: 120, lineHeight: 150, marginTop: 4 },
+  repsLabel: { fontFamily: fonts.black, fontSize: 13, letterSpacing: 3, marginTop: -8, marginBottom: 8 },
+  counter: { fontFamily: fonts.black, fontSize: 15, letterSpacing: 3 },
+  cue: { fontFamily: fonts.medium, fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 12 },
   next: { fontFamily: fonts.bold, fontSize: 12, letterSpacing: 2, marginTop: 10 },
   fill: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden' },
   topBar: {
@@ -260,6 +337,7 @@ const styles = StyleSheet.create({
     gap: 22,
     paddingLeft: 70,
   },
+  controlsWide: { position: 'absolute', left: 20, right: 20 },
   bigBtn: {
     width: 84,
     height: 84,
@@ -270,6 +348,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  setDone: {
+    height: 68,
+    borderRadius: radius.pill,
+    backgroundColor: colors.yellow,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  setDoneText: { fontFamily: fonts.black, color: colors.black, fontSize: 15, letterSpacing: 1.5 },
   doneWrap: { justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20 },
   doneBadge: {
     width: 72,
@@ -281,5 +369,5 @@ const styles = StyleSheet.create({
     marginTop: 60,
   },
   doneTitle: { fontFamily: fonts.display, color: colors.white, fontSize: 84, lineHeight: 100, marginTop: 18 },
-  doneSub: { fontFamily: fonts.bold, color: colors.muted, fontSize: 13, letterSpacing: 1.5 },
+  doneSub: { fontFamily: fonts.bold, color: colors.muted, fontSize: 13, letterSpacing: 1.5, textAlign: 'center' },
 });

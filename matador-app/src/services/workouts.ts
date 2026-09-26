@@ -23,6 +23,9 @@ export type Move = {
   reps: string;
   rest: string | null;
   cue: string;
+  /** Seconds per set when done for time. Absent on plans saved before guided sessions. */
+  workSeconds?: number | null;
+  restSeconds?: number | null;
 };
 
 export type WorkoutPlan = {

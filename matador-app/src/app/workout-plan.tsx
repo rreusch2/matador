@@ -51,6 +51,11 @@ export default function WorkoutPlanScreen() {
   const level = LEVEL_OPTIONS.find((l) => l.key === plan.prefs.level);
   const totalSets = plan.main.reduce((sum, m) => sum + (m.sets ?? 0), 0);
 
+  const start = () => {
+    haptic.medium();
+    router.push({ pathname: '/timer', params: { mode: 'session' } });
+  };
+
   const log = () => {
     logWorkout(plan.logAs, plan.minutes);
     markPlanCompleted(plan.id);
@@ -65,7 +70,7 @@ export default function WorkoutPlanScreen() {
       <ScrollView
         key={plan.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: insets.top + 72, paddingBottom: insets.bottom + 140 }}
+        contentContainerStyle={{ paddingTop: insets.top + 72, paddingBottom: insets.bottom + 200 }}
       >
         <Animated.View entering={FadeIn.duration(400)} style={styles.hero}>
           <View style={styles.kickerRow}>
@@ -152,14 +157,22 @@ export default function WorkoutPlanScreen() {
       </View>
 
       <View style={[styles.actions, { paddingBottom: insets.bottom + 14 }]}>
+        <PressableScale onPress={start} style={styles.primary} scaleTo={0.97} hapticFeedback={false}>
+          <Ionicons name="play" size={18} color={colors.black} />
+          <Text style={styles.primaryText}>START SESSION</Text>
+        </PressableScale>
         <PressableScale
           onPress={logged ? undefined : log}
-          style={[styles.primary, logged && { backgroundColor: colors.white }]}
+          style={styles.secondary}
           scaleTo={0.97}
           hapticFeedback={false}
         >
-          <Ionicons name={logged ? 'checkmark-circle' : 'checkmark'} size={18} color={colors.black} />
-          <Text style={styles.primaryText}>
+          <Ionicons
+            name={logged ? 'checkmark-circle' : 'checkmark'}
+            size={16}
+            color={logged ? colors.yellow : colors.white}
+          />
+          <Text style={[styles.secondaryText, logged && { color: colors.yellow }]}>
             {logged ? 'LOGGED' : plan.completedAt ? 'LOG AGAIN' : 'LOG WORKOUT'}
           </Text>
         </PressableScale>
@@ -414,10 +427,22 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: 20,
     paddingTop: 14,
+    gap: 10,
     backgroundColor: 'rgba(0,0,0,0.94)',
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  secondary: {
+    height: 48,
+    borderRadius: radius.pill,
+    borderWidth: 1.5,
+    borderColor: colors.borderBright,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  secondaryText: { fontFamily: fonts.black, color: colors.white, fontSize: 12, letterSpacing: 1.2 },
   primary: {
     height: 56,
     borderRadius: radius.pill,

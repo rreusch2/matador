@@ -54,6 +54,8 @@ WRITING RULES
 - sets: integer 1-6, or null for warm-up and cool-down moves done once.
 - reps: short, e.g. "8-10", "12", "30s", "10/side", "45s on", "5 breaths", "AMRAP 3 min".
 - rest: short, e.g. "45s", "90s", "2 min", or null when not applicable.
+- workSeconds: when a set is held or performed for time, the seconds for ONE set as an integer (reps "45s" means 45). Null when the set is counted in reps or breaths.
+- restSeconds: the rest field as an integer number of seconds ("90s" means 90, "2 min" means 120). Null when rest is null.
 - cue: ONE punchy coaching cue that makes the rep better (form, tempo or breathing). Max 80 characters. No filler.
 - title: 2-4 words, ALL CAPS, energetic and specific to this session (e.g. "UPPER BODY IRON", "LEG DAY ENGINE"). Letters, numbers, spaces and hyphens only.
 - summary: one sentence, max 120 characters, telling the athlete what this session does for them.

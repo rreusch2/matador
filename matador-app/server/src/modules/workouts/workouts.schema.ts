@@ -23,7 +23,17 @@ export const generateInput = z.object({
 export type GenerateInput = z.infer<typeof generateInput>;
 export type WorkoutPrefs = Pick<GenerateInput, 'goal' | 'focus' | 'minutes' | 'equipment' | 'level'>;
 
-export type Move = { name: string; sets: number | null; reps: string; rest: string | null; cue: string };
+export type Move = {
+  name: string;
+  sets: number | null;
+  reps: string;
+  rest: string | null;
+  cue: string;
+  /** Seconds per set when the move is done for time, else null. Drives the guided session timer. */
+  workSeconds: number | null;
+  /** Rest between sets in seconds, else null. */
+  restSeconds: number | null;
+};
 
 export type PlanBody = {
   title: string;
@@ -58,8 +68,10 @@ const move = {
     reps: { type: 'string' },
     rest: { type: ['string', 'null'] },
     cue: { type: 'string' },
+    workSeconds: { type: ['integer', 'null'] },
+    restSeconds: { type: ['integer', 'null'] },
   },
-  required: ['name', 'sets', 'reps', 'rest', 'cue'],
+  required: ['name', 'sets', 'reps', 'rest', 'cue', 'workSeconds', 'restSeconds'],
   additionalProperties: false,
 };
 
@@ -89,6 +101,9 @@ export const PLAN_JSON_SCHEMA = {
 const clean = (v: unknown, max: number) =>
   typeof v === 'string' ? v.replace(/[*_#`]/g, '').replace(/\s+/g, ' ').trim().slice(0, max) : '';
 
+const seconds = (v: unknown, min: number, max: number) =>
+  typeof v === 'number' && Number.isFinite(v) && v >= min ? Math.min(Math.round(v), max) : null;
+
 function cleanMove(raw: unknown): Move | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
@@ -97,7 +112,15 @@ function cleanMove(raw: unknown): Move | null {
   if (!name || !reps) return null;
   const sets =
     typeof r.sets === 'number' && Number.isFinite(r.sets) ? Math.min(Math.max(Math.round(r.sets), 1), 8) : null;
-  return { name, sets, reps, rest: clean(r.rest, 12) || null, cue: clean(r.cue, 100) };
+  return {
+    name,
+    sets,
+    reps,
+    rest: clean(r.rest, 12) || null,
+    cue: clean(r.cue, 100),
+    workSeconds: seconds(r.workSeconds, 5, 900),
+    restSeconds: seconds(r.restSeconds, 5, 600),
+  };
 }
 
 const cleanList = (v: unknown, max: number) =>
