@@ -2,9 +2,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
-import Animated, { Easing, FadeInDown, LinearTransition } from 'react-native-reanimated';
+import Animated, { Easing, FadeInDown, LinearTransition, useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BrandHeader } from '@/components/BrandHeader';
 import { ProductCard } from '@/components/ProductCard';
 import { Reveal } from '@/components/ui';
 import { TAB_BAR_HEIGHT, colors, fonts, radius } from '@/constants/theme';
@@ -24,6 +25,10 @@ export default function ShopScreen() {
   const params = useLocalSearchParams<{ category?: Category }>();
   const [filter, setFilter] = useState<Filter>(params.category ?? 'all');
   const [query, setQuery] = useState('');
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((e) => {
+    scrollY.value = e.contentOffset.y;
+  });
 
   useEffect(() => {
     if (params.category) setFilter(params.category);
@@ -43,17 +48,19 @@ export default function ShopScreen() {
 
   return (
     <View style={styles.screen}>
-      <FlatList
+      <Animated.FlatList
         data={data}
         key="grid"
         numColumns={2}
         keyExtractor={(p) => p.id}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         columnWrapperStyle={{ gap, paddingHorizontal: 20 }}
         contentContainerStyle={{ gap, paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 40 }}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
         ListHeaderComponent={
-          <View style={{ paddingTop: insets.top + 16 }}>
+          <View style={{ paddingTop: insets.top + 68 }}>
             <Reveal style={{ paddingHorizontal: 20 }}>
               <Text style={styles.kicker}>MATADOR STORE</Text>
               <Text style={styles.title}>GEAR UP.</Text>
@@ -123,6 +130,7 @@ export default function ShopScreen() {
           </Animated.View>
         )}
       />
+      <BrandHeader scrollY={scrollY} />
     </View>
   );
 }

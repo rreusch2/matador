@@ -27,6 +27,8 @@ type Action =
 export type LogWorkoutOptions = {
   source?: WorkoutSource;
   planId?: string | null;
+  /** When the session happened. Defaults to now, and future times are clamped to now. */
+  at?: number;
 };
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -159,7 +161,9 @@ export function FitnessProvider({ children }: { children: ReactNode }) {
       logWorkout: (type, minutes, options) => {
         const accountId = userIdRef.current;
         if (!accountId) return;
-        const entry: Workout = { id: newWorkoutId(), type, minutes, at: Date.now() };
+        const requested = options?.at;
+        const at = requested != null && Number.isFinite(requested) ? Math.min(requested, Date.now()) : Date.now();
+        const entry: Workout = { id: newWorkoutId(), type, minutes, at };
         const source = options?.source ?? 'manual';
         const planId = options?.planId ?? null;
         pendingAdds.current.set(entry.id, { workout: entry, source, planId });

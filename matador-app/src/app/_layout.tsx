@@ -72,6 +72,10 @@ function AppShell() {
           <Stack.Screen name="workout-plan" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="workout-history" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="activity" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="program" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="goals" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="exercises/index" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="exercises/[slug]" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="account" options={{ animation: 'slide_from_bottom' }} />
         </Stack.Protected>
         <Stack.Protected guard={!signedIn}>

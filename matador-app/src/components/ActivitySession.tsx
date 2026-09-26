@@ -9,12 +9,20 @@ function timeOfDay(t: number) {
   return new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export function ActivitySession({ workout, onRemove }: { workout: Workout; onRemove: () => void }) {
+export function ActivitySession({
+  workout,
+  onRemove,
+  compact = false,
+}: {
+  workout: Workout;
+  onRemove: () => void;
+  compact?: boolean;
+}) {
   const kind = WORKOUT_TYPES.find((item) => item.key === workout.type)!;
   return (
-    <View style={styles.recent}>
-      <View style={styles.recentIcon}>
-        <Ionicons name={kind.icon as keyof typeof Ionicons.glyphMap} size={16} color={colors.yellow} />
+    <View style={[styles.recent, compact && styles.recentCompact]}>
+      <View style={[styles.recentIcon, compact && styles.recentIconCompact]}>
+        <Ionicons name={kind.icon as keyof typeof Ionicons.glyphMap} size={compact ? 14 : 16} color={colors.yellow} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.recentName}>{kind.label}</Text>
@@ -47,6 +55,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.surfaceHigh,
   },
+  recentCompact: { gap: 10, paddingVertical: 8, paddingHorizontal: 10 },
   recentIcon: {
     width: 34,
     height: 34,
@@ -55,6 +64,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  recentIconCompact: { width: 28, height: 28, borderRadius: 14 },
   recentName: { fontFamily: fonts.bold, color: colors.white, fontSize: 14 },
   recentMeta: { fontFamily: fonts.medium, color: colors.muted, fontSize: 11, marginTop: 1 },
   recentMin: { fontFamily: fonts.black, color: colors.white, fontSize: 12, letterSpacing: 1 },

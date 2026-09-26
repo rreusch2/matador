@@ -2,24 +2,21 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Animated, {
-  Extrapolation,
-  interpolate,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-} from 'react-native-reanimated';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BrandHeader } from '@/components/BrandHeader';
 import { HeroCarousel } from '@/components/HeroCarousel';
 import { Marquee } from '@/components/Marquee';
 import { ProductArt } from '@/components/ProductArt';
 import { ProductCard } from '@/components/ProductCard';
-import { IconButton, PressableScale, Reveal, SectionHeader } from '@/components/ui';
+import { PressableScale, Reveal, SectionHeader } from '@/components/ui';
 import { Logo } from '@/components/Logo';
-import { HEADER_BRAND, TAB_BAR_HEIGHT, colors, fonts, radius } from '@/constants/theme';
-import { useCart } from '@/context/cart';
+import { TAB_BAR_HEIGHT, colors, fonts, radius } from '@/constants/theme';
+import { useFitness } from '@/context/fitness';
 import { getProduct, products, type Category } from '@/data/products';
+
+const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 const goShop = (category?: Category) =>
   router.navigate({ pathname: '/shop', params: category ? { category } : {} });
@@ -27,16 +24,11 @@ const goShop = (category?: Category) =>
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { count } = useCart();
   const scrollY = useSharedValue(0);
 
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.value = e.contentOffset.y;
   });
-
-  const headerBg = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [0, 40], [0, 1], Extrapolation.CLAMP),
-  }));
 
   const favorites = products.filter((p) => p.badge === 'BEST SELLER' || p.badge === 'NEW' || p.badge === 'EXTRA');
   const cardW = Math.min(190, width * 0.46);
@@ -49,7 +41,12 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: TAB_BAR_HEIGHT + insets.bottom + 40 }}
       >
-        <Reveal style={{ paddingTop: insets.top + 68 }}>
+        <Reveal style={{ paddingTop: insets.top + 68, paddingHorizontal: 20 }}>
+          <TodayCard />
+        </Reveal>
+
+        <Reveal delay={120} style={{ marginTop: 32 }}>
+          <SectionHeader kicker="FOR THE SESSION" title="FUEL UP" />
           <HeroCarousel />
         </Reveal>
 
@@ -68,7 +65,7 @@ export default function HomeScreen() {
 
         <Reveal delay={450} style={styles.marquees}>
           <Marquee
-            items={['BLACK', 'WHITE', 'GOLD', 'MATADOR', 'OWN THE ARENA']}
+            items={['TRAIN', 'FUEL', 'RECOVER', 'REPEAT', 'OWN THE ARENA']}
             background={colors.white}
             color={colors.black}
             rotate={3}
@@ -112,16 +109,79 @@ export default function HomeScreen() {
         </View>
       </Animated.ScrollView>
 
-      <View style={[styles.header, { paddingTop: insets.top + HEADER_BRAND.top }]}>
-        <Animated.View style={[StyleSheet.absoluteFill, styles.headerBg, headerBg]} />
-        <View style={styles.brand}>
-          <Logo width={HEADER_BRAND.logoWidth} color="yellow" />
-          <Text style={styles.brandText}>MATADOR</Text>
+      <BrandHeader scrollY={scrollY} />
+    </View>
+  );
+}
+
+function TodayCard() {
+  const { week, weekMinutes, streak } = useFitness();
+  const today = week[week.length - 1];
+  const trained = today.minutes > 0;
+  const max = Math.max(30, ...week.map((day) => day.minutes));
+
+  return (
+    <View style={styles.today}>
+      <View style={styles.todayTop}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.todayKicker}>{trained ? 'LOGGED TODAY' : 'TODAY'}</Text>
+          <Text style={styles.todayTitle}>{trained ? today.minutes : 'TRAIN.'}</Text>
+          <Text style={styles.todayUnit}>{trained ? 'MIN TODAY' : 'NO SESSION YET'}</Text>
         </View>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <IconButton icon="bag-handle-outline" badge={count} onPress={() => router.navigate('/cart')} accessibilityLabel="Cart" />
-          <IconButton icon="person-outline" onPress={() => router.push('/account')} accessibilityLabel="Account" />
+        <View style={styles.streakPill}>
+          <Ionicons name="flame" size={14} color={colors.black} />
+          <Text style={styles.streakText}>{streak}</Text>
+          <Text style={styles.streakUnit}>{streak === 1 ? 'DAY' : 'DAYS'}</Text>
         </View>
+      </View>
+
+      <View style={styles.week}>
+        {week.map((day, i) => {
+          const isToday = i === week.length - 1;
+          const pct = day.minutes / max;
+          return (
+            <View key={day.day} style={styles.weekCol}>
+              <View style={styles.weekTrack}>
+                <View
+                  style={[
+                    styles.weekBar,
+                    {
+                      height: `${Math.max(pct, isToday ? 0.12 : 0) * 100}%`,
+                      backgroundColor: isToday ? colors.yellow : day.minutes > 0 ? colors.white : 'transparent',
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={[styles.weekLabel, isToday && { color: colors.yellow }]}>
+                {DAY_LETTERS[new Date(day.day).getDay()]}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+      <Text style={styles.weekMeta}>{weekMinutes} MIN THIS WEEK</Text>
+
+      <View style={styles.todayActions}>
+        <PressableScale
+          onPress={() => router.navigate('/train')}
+          containerStyle={styles.actionSlot}
+          style={styles.trainBtn}
+          scaleTo={0.98}
+          accessibilityLabel="Open Train"
+        >
+          <Ionicons name="barbell" size={16} color={colors.black} />
+          <Text style={styles.trainBtnText}>TRAIN</Text>
+        </PressableScale>
+        <PressableScale
+          onPress={() => goShop()}
+          containerStyle={styles.actionSlot}
+          style={styles.shopBtn}
+          scaleTo={0.98}
+          accessibilityLabel="Open Shop"
+        >
+          <Ionicons name="bag-handle-outline" size={16} color={colors.white} />
+          <Text style={styles.shopBtnText}>SHOP</Text>
+        </PressableScale>
       </View>
     </View>
   );
@@ -184,24 +244,64 @@ function CategoryGrid() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.black },
-  header: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: HEADER_BRAND.left,
-    paddingBottom: 10,
+  today: {
+    padding: 18,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  todayTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  todayKicker: { fontFamily: fonts.bold, color: colors.yellow, fontSize: 10, letterSpacing: 2.5 },
+  todayTitle: { fontFamily: fonts.display, color: colors.white, fontSize: 48, lineHeight: 60, marginTop: 2 },
+  todayUnit: { fontFamily: fonts.bold, color: colors.muted, fontSize: 11, letterSpacing: 1.8, marginTop: -4 },
+  streakPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 4,
+    paddingHorizontal: 10,
+    height: 32,
+    borderRadius: radius.pill,
+    backgroundColor: colors.yellow,
   },
-  headerBg: {
-    backgroundColor: 'rgba(0,0,0,0.92)',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+  streakText: { fontFamily: fonts.black, color: colors.black, fontSize: 14 },
+  streakUnit: { fontFamily: fonts.black, color: colors.black, fontSize: 9, letterSpacing: 0.6 },
+  week: { flexDirection: 'row', gap: 6, height: 72, marginTop: 16 },
+  weekCol: { flex: 1, alignItems: 'center', gap: 6 },
+  weekTrack: {
+    flex: 1,
+    width: 16,
+    justifyContent: 'flex-end',
+    backgroundColor: colors.surfaceHigh,
+    borderRadius: 6,
+    overflow: 'hidden',
   },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 10, height: HEADER_BRAND.rowHeight },
-  brandText: { fontFamily: fonts.display, color: colors.white, fontSize: 22, letterSpacing: 3 },
+  weekBar: { width: '100%' },
+  weekLabel: { fontFamily: fonts.black, color: colors.muted, fontSize: 9 },
+  weekMeta: { fontFamily: fonts.bold, color: colors.muted, fontSize: 10, letterSpacing: 1.6, marginTop: 10 },
+  todayActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  actionSlot: { flex: 1 },
+  trainBtn: {
+    height: 48,
+    borderRadius: radius.pill,
+    backgroundColor: colors.yellow,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  trainBtnText: { fontFamily: fonts.black, color: colors.black, fontSize: 13, letterSpacing: 1.6 },
+  shopBtn: {
+    height: 48,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderBright,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  shopBtnText: { fontFamily: fonts.black, color: colors.white, fontSize: 13, letterSpacing: 1.6 },
   stats: {
     flexDirection: 'row',
     marginHorizontal: 20,
