@@ -4,6 +4,7 @@ import { env } from '../../config/env.js';
 import { HttpError, notFound, tooMany } from '../../lib/errors.js';
 import { logger } from '../../lib/logger.js';
 import { grokJson } from '../../lib/xai.js';
+import { catalogBySlug, loadCatalog } from './catalog.js';
 import { SYSTEM_PROMPT, buildUserPrompt } from './workouts.prompt.js';
 import {
   PLAN_JSON_SCHEMA,
@@ -66,15 +67,17 @@ async function assertUnderDailyLimit(db: SupabaseClient, userId: string) {
 export async function generatePlan(db: SupabaseClient, userId: string, input: GenerateInput): Promise<WorkoutPlan> {
   await assertUnderDailyLimit(db, userId);
 
-  const request = { system: SYSTEM_PROMPT, user: buildUserPrompt(input), schema: PLAN_JSON_SCHEMA };
+  const catalog = await loadCatalog(db, input);
+  const lookup = catalogBySlug(catalog);
+  const request = { system: SYSTEM_PROMPT, user: buildUserPrompt(input, catalog), schema: PLAN_JSON_SCHEMA };
 
-  // One retry if the output fails validation.
+  // One retry if the output fails validation or leaves the catalog.
   let result = await grokJson(request);
-  let plan = sanitizePlan(result.data);
+  let plan = sanitizePlan(result.data, lookup);
   if (!plan) {
     logger.warn('plan failed validation, retrying');
     result = await grokJson(request);
-    plan = sanitizePlan(result.data);
+    plan = sanitizePlan(result.data, lookup);
   }
   if (!plan) throw new HttpError(502, 'ai_failed', 'Could not build your workout. Please try again.');
 

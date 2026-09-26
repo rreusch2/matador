@@ -333,6 +333,7 @@ alter table public.order_items      enable row level security;
 alter table public.product_reviews  enable row level security;
 alter table public.workout_plans    enable row level security;
 alter table public.workouts         enable row level security;
+alter table public.exercises        enable row level security;
 
 -- Profiles: read + update your own (rows are created by the trigger).
 drop policy if exists "profiles: read own" on public.profiles;
@@ -343,6 +344,11 @@ drop policy if exists "profiles: update own" on public.profiles;
 create policy "profiles: update own" on public.profiles
   for update to authenticated
   using ((select auth.uid()) = id) with check ((select auth.uid()) = id);
+
+-- Exercise catalog: anyone can read. Writes stay in the dashboard.
+drop policy if exists "exercises: public read" on public.exercises;
+create policy "exercises: public read" on public.exercises
+  for select to anon, authenticated using (true);
 
 -- Catalog: anyone can read active products.
 drop policy if exists "products: public read" on public.products;

@@ -14,6 +14,8 @@ export type Phase = {
   cue: string;
   /** Shown in place of the clock on `reps` phases. */
   reps: string;
+  /** YouTube demo for this move, if the catalog has one. */
+  demo?: string | null;
 };
 
 export const PREP_SECONDS = 5;
@@ -63,6 +65,7 @@ function movePhases(move: Move, section: string, index: number, total: number): 
       counter,
       cue: move.cue,
       reps: move.reps,
+      demo: move.demo,
     });
     if (rest) {
       phases.push({
@@ -73,6 +76,7 @@ function movePhases(move: Move, section: string, index: number, total: number): 
         counter,
         cue: '',
         reps: '',
+        demo: move.demo,
       });
     }
   }

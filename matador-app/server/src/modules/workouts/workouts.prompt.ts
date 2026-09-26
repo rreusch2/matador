@@ -1,4 +1,5 @@
 import type { GenerateInput } from './workouts.schema.js';
+import { formatCatalog, type CatalogRow } from './catalog.js';
 
 const GOAL_TEXT: Record<GenerateInput['goal'], string> = {
   muscle: 'Build muscle (hypertrophy)',
@@ -38,6 +39,7 @@ PROGRAMMING RULES
 - Main exercise count: 15 min = 3-4, 30 min = 4-5, 45 min = 5-6, 60 min = 6-8.
 - Warm-up: 2-4 dynamic moves that prepare the exact joints and movement patterns trained today. Cool-down: 2-3 stretches or breathing drills for the muscles trained.
 - Order main work intelligently: the most technical or heaviest compound lift first, accessories next, isolation and core last.
+- Use ONLY slugs from the CATALOG in the user message. Never invent an exercise. Copy the slug exactly.
 - Use ONLY the equipment available. Bodyweight means zero equipment. Bands means resistance bands only. Never assume a pull-up bar unless it is a full gym.
 - Match the level. Beginners get simple, stable, low-skill movements, moderate volume and clear cues. Advanced athletes can get complex lifts, supersets (say so in the cue), tempo work and higher intensity.
 - Goal guidance:
@@ -50,7 +52,7 @@ PROGRAMMING RULES
 - If an avoid list is given, this is a NEW VERSION request: do not reuse those main exercises. Deliver a genuinely different session with the same intent.
 
 WRITING RULES
-- name: the standard, recognizable exercise name in Title Case (e.g. "Romanian Deadlift", "Incline Dumbbell Press"). Max 40 characters.
+- slug: copy exactly from the CATALOG. This is how the app looks up the name and demo video.
 - sets: integer 1-6, or null for warm-up and cool-down moves done once.
 - reps: short, e.g. "8-10", "12", "30s", "10/side", "45s on", "5 breaths", "AMRAP 3 min".
 - rest: short, e.g. "45s", "90s", "2 min", or null when not applicable.
@@ -63,7 +65,7 @@ WRITING RULES
 - intensity: low, moderate or high, describing how hard the session feels overall.
 - Plain text only. No markdown, no emojis. Never mention AI, models, prompts or being an assistant.`;
 
-export function buildUserPrompt(input: GenerateInput) {
+export function buildUserPrompt(input: GenerateInput, catalog: CatalogRow[]) {
   const lines = [
     'Build my session.',
     `Goal: ${GOAL_TEXT[input.goal]}`,
@@ -73,6 +75,9 @@ export function buildUserPrompt(input: GenerateInput) {
     `Level: ${LEVEL_TEXT[input.level]}`,
   ];
   if (input.notes) lines.push(`Athlete notes (injuries, limits, preferences only): """${input.notes}"""`);
-  if (input.avoid.length) lines.push(`Avoid these main exercises from the previous version: ${input.avoid.join(', ')}`);
+  if (input.avoid.length) lines.push(`Avoid these catalog slugs from the previous version: ${input.avoid.join(', ')}`);
+  lines.push('Prefer slugs marked demo when the programming is equal.');
+  lines.push('CATALOG (slug | name | gear | region | muscle | pattern | level | demo)');
+  lines.push(formatCatalog(catalog));
   return lines.join('\n');
 }

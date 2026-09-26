@@ -24,7 +24,9 @@ export type GenerateInput = z.infer<typeof generateInput>;
 export type WorkoutPrefs = Pick<GenerateInput, 'goal' | 'focus' | 'minutes' | 'equipment' | 'level'>;
 
 export type Move = {
+  slug: string;
   name: string;
+  demo: string | null;
   sets: number | null;
   reps: string;
   rest: string | null;
@@ -63,7 +65,7 @@ export type WorkoutPlan = PlanBody & {
 const move = {
   type: 'object',
   properties: {
-    name: { type: 'string' },
+    slug: { type: 'string' },
     sets: { type: ['integer', 'null'] },
     reps: { type: 'string' },
     rest: { type: ['string', 'null'] },
@@ -71,7 +73,7 @@ const move = {
     workSeconds: { type: ['integer', 'null'] },
     restSeconds: { type: ['integer', 'null'] },
   },
-  required: ['name', 'sets', 'reps', 'rest', 'cue', 'workSeconds', 'restSeconds'],
+  required: ['slug', 'sets', 'reps', 'rest', 'cue', 'workSeconds', 'restSeconds'],
   additionalProperties: false,
 };
 
@@ -104,16 +106,28 @@ const clean = (v: unknown, max: number) =>
 const seconds = (v: unknown, min: number, max: number) =>
   typeof v === 'number' && Number.isFinite(v) && v >= min ? Math.min(Math.round(v), max) : null;
 
-function cleanMove(raw: unknown): Move | null {
+export type CatalogLookup = {
+  slugs: Map<string, { slug: string; name: string; demo: string | null }>;
+  names: Map<string, { slug: string; name: string; demo: string | null }>;
+};
+
+function cleanMove(raw: unknown, catalog: CatalogLookup): Move | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  const name = clean(r.name, 48);
+  const slugOrName = clean(r.slug, 80) || clean(r.name, 80);
   const reps = clean(r.reps, 18);
-  if (!name || !reps) return null;
+  if (!slugOrName || !reps) return null;
+  const hit =
+    catalog.slugs.get(slugOrName) ||
+    catalog.slugs.get(slugOrName.toLowerCase()) ||
+    catalog.names.get(slugOrName.toLowerCase());
+  if (!hit) return null;
   const sets =
     typeof r.sets === 'number' && Number.isFinite(r.sets) ? Math.min(Math.max(Math.round(r.sets), 1), 8) : null;
   return {
-    name,
+    slug: hit.slug,
+    name: hit.name,
+    demo: hit.demo && /^https?:\/\//i.test(hit.demo) ? hit.demo : null,
     sets,
     reps,
     rest: clean(r.rest, 12) || null,
@@ -123,16 +137,25 @@ function cleanMove(raw: unknown): Move | null {
   };
 }
 
-const cleanList = (v: unknown, max: number) =>
-  (Array.isArray(v) ? v : []).map(cleanMove).filter((m): m is Move => !!m).slice(0, max);
+const cleanList = (v: unknown, max: number, catalog: CatalogLookup, used: Set<string>) =>
+  (Array.isArray(v) ? v : [])
+    .map((item) => cleanMove(item, catalog))
+    .filter((m): m is Move => {
+      if (!m || used.has(m.slug)) return false;
+      used.add(m.slug);
+      return true;
+    })
+    .slice(0, max);
 
 /** Returns a safe plan, or null when the output is unusable. */
-export function sanitizePlan(raw: unknown): PlanBody | null {
+export function sanitizePlan(raw: unknown, catalog: CatalogLookup): PlanBody | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  const main = cleanList(r.main, 9);
-  const warmup = cleanList(r.warmup, 5);
-  const cooldown = cleanList(r.cooldown, 4);
+  const used = new Set<string>();
+  const warmup = cleanList(r.warmup, 5, catalog, used);
+  const main = cleanList(r.main, 9, catalog, used);
+  const finisher = cleanList(r.finisher, 1, catalog, used);
+  const cooldown = cleanList(r.cooldown, 4, catalog, used);
   if (main.length < 2 || warmup.length < 1 || cooldown.length < 1) return null;
   return {
     title: clean(r.title, 32).toUpperCase() || 'YOUR SESSION',
@@ -141,7 +164,7 @@ export function sanitizePlan(raw: unknown): PlanBody | null {
     coachNote: clean(r.coachNote, 240),
     warmup,
     main,
-    finisher: cleanList(r.finisher, 1),
+    finisher,
     cooldown,
   };
 }
