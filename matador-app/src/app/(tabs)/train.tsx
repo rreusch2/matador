@@ -1,16 +1,18 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
-import { useEffect, useState, type ReactNode } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Logo } from '@/components/Logo';
+import { SessionRow, useSavedPlans } from '@/components/SessionRow';
 import { Button, PressableScale, Reveal } from '@/components/ui';
 import { WorkoutBuilderCard } from '@/components/WorkoutBuilderCard';
 import { TAB_BAR_HEIGHT, colors, fonts, radius } from '@/constants/theme';
 import { WORKOUT_TYPES, useFitness, type WorkoutType } from '@/context/fitness';
+import { savedPlans } from '@/services/workouts';
 import { haptic } from '@/utils/haptics';
 
 type Preset = { key: string; name: string; work: number; rest: number; rounds: number };
@@ -35,9 +37,6 @@ function timeOfDay(t: number) {
 
 export default function TrainScreen() {
   const insets = useSafeAreaInsets();
-  const { streak, workouts } = useFitness();
-  const totalMinutes = workouts.reduce((s, w) => s + w.minutes, 0);
-  const totalHours = totalMinutes >= 600 ? `${Math.round(totalMinutes / 60)}` : (totalMinutes / 60).toFixed(1);
   const [logOpen, setLogOpen] = useState(false);
   const today = new Date()
     .toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
@@ -55,22 +54,22 @@ export default function TrainScreen() {
           <Text style={styles.date}>{today}</Text>
         </Reveal>
 
-        <Reveal delay={60} style={styles.stats}>
-          <Stat value={`${streak}`} label="DAY STREAK" icon="flame" />
-          <Stat value={`${workouts.length}`} label="WORKOUTS" icon="barbell" divider />
-          <Stat value={totalHours} label="HOURS TRAINED" icon="time" divider />
-        </Reveal>
+        <View style={styles.rule} />
 
-        <Reveal delay={120}>
+        <Reveal delay={60} style={{ marginTop: 22 }}>
           <WorkoutBuilderCard />
         </Reveal>
 
-        <Reveal delay={170}>
-          <IntervalCard />
+        <Reveal delay={120}>
+          <SavedSessionsCard />
         </Reveal>
 
-        <Reveal delay={220}>
+        <Reveal delay={180}>
           <ActivityCard onLog={() => setLogOpen(true)} />
+        </Reveal>
+
+        <Reveal delay={230}>
+          <IntervalCard />
         </Reveal>
 
         <View style={styles.footer}>
@@ -86,31 +85,6 @@ export default function TrainScreen() {
   );
 }
 
-function Stat({
-  value,
-  unit,
-  label,
-  icon,
-  divider,
-}: {
-  value: string;
-  unit?: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  divider?: boolean;
-}) {
-  return (
-    <View style={[styles.stat, divider && styles.statDivider]}>
-      <Ionicons name={icon} size={14} color={colors.yellow} />
-      <Text style={styles.statValue}>
-        {value}
-        {unit && <Text style={styles.statUnit}>{unit}</Text>}
-      </Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 function CardHeader({ kicker, title, right }: { kicker: string; title: string; right?: ReactNode }) {
   return (
     <View style={styles.cardHeader}>
@@ -119,6 +93,45 @@ function CardHeader({ kicker, title, right }: { kicker: string; title: string; r
         <Text style={styles.cardTitle}>{title}</Text>
       </View>
       {right}
+    </View>
+  );
+}
+
+/* ---------------------------------- Saved sessions ---------------------------------- */
+
+function SavedSessionsCard() {
+  const { plans } = useSavedPlans();
+
+  useFocusEffect(
+    useCallback(() => {
+      savedPlans.refresh();
+    }, [])
+  );
+
+  if (!plans?.length) return null;
+
+  return (
+    <View style={styles.card}>
+      <CardHeader
+        kicker="YOUR LIBRARY"
+        title="SAVED SESSIONS"
+        right={
+          <PressableScale
+            onPress={() => router.push('/workout-history')}
+            style={styles.seeAll}
+            scaleTo={0.94}
+            accessibilityLabel="See all saved sessions"
+          >
+            <Text style={styles.seeAllText}>SEE ALL</Text>
+            <Ionicons name="chevron-forward" size={12} color={colors.yellow} />
+          </PressableScale>
+        }
+      />
+      <View style={{ gap: 8 }}>
+        {plans.slice(0, 3).map((plan) => (
+          <SessionRow key={plan.id} plan={plan} />
+        ))}
+      </View>
     </View>
   );
 }
@@ -456,22 +469,12 @@ const styles = StyleSheet.create({
   kicker: { fontFamily: fonts.bold, color: colors.yellow, fontSize: 11, letterSpacing: 3 },
   title: { fontFamily: fonts.display, color: colors.white, fontSize: 56, lineHeight: 72, marginTop: 2 },
   date: { fontFamily: fonts.bold, color: colors.muted, fontSize: 11, letterSpacing: 2 },
-
-  stats: {
-    flexDirection: 'row',
+  rule: {
+    height: 1,
+    backgroundColor: colors.border,
     marginHorizontal: 20,
     marginTop: 22,
-    marginBottom: 22,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.border,
   },
-  stat: { flex: 1, alignItems: 'center', gap: 2 },
-  statDivider: { borderLeftWidth: 1, borderLeftColor: colors.border },
-  statValue: { fontFamily: fonts.display, color: colors.white, fontSize: 28, lineHeight: 36 },
-  statUnit: { fontFamily: fonts.display, color: colors.mutedDark, fontSize: 16 },
-  statLabel: { fontFamily: fonts.bold, color: colors.muted, fontSize: 9, letterSpacing: 1.5 },
 
   card: {
     marginHorizontal: 20,
@@ -533,6 +536,19 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   startText: { fontFamily: fonts.black, color: colors.yellow, fontSize: 14, letterSpacing: 1.5 },
+
+  seeAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingLeft: 12,
+    paddingRight: 8,
+    height: 28,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: 'rgba(254,219,0,0.35)',
+  },
+  seeAllText: { fontFamily: fonts.black, color: colors.yellow, fontSize: 10, letterSpacing: 1.5 },
 
   streakPill: {
     flexDirection: 'row',

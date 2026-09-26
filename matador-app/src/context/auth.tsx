@@ -2,6 +2,7 @@ import type { Session, User } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
+import { savedPlans } from '@/services/workouts';
 
 type SignUpInput = { firstName: string; email: string; password: string; marketing: boolean };
 
@@ -45,7 +46,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => setSession(null))
       .finally(() => setLoading(false));
 
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
+    const { data } = supabase.auth.onAuthStateChange((event, next) => {
+      if (event === 'SIGNED_OUT') savedPlans.clear();
+      setSession(next);
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 

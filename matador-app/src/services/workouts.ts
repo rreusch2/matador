@@ -100,14 +100,75 @@ export async function listPlans(limit = 20): Promise<WorkoutPlan[]> {
 
 /** Marks a saved plan as completed. Best effort; the local log drives streaks. */
 export async function markPlanCompleted(planId: string) {
+  savedPlans.update(planId, { completedAt: new Date().toISOString() });
   await api(`/v1/workouts/plans/${planId}/complete`, { method: 'POST' }).catch(() => {});
 }
 
-/** Hands the latest plan from the builder card to the plan screen. */
+/** Hands a plan (fresh from the builder or opened from history) to the plan screen. */
 let latest: WorkoutPlan | null = null;
 export const planStore = {
   get: () => latest,
   set: (plan: WorkoutPlan) => {
     latest = plan;
+  },
+};
+
+/* ------------------------------ Saved sessions cache ------------------------------ */
+
+export type SavedPlansState = {
+  plans: WorkoutPlan[] | null;
+  loading: boolean;
+  error: string | null;
+};
+
+const HISTORY_LIMIT = 50;
+const STALE_MS = 60_000;
+
+let saved: SavedPlansState = { plans: null, loading: false, error: null };
+let fetchedAt = 0;
+let generation = 0;
+const listeners = new Set<() => void>();
+
+function setSaved(next: Partial<SavedPlansState>) {
+  saved = { ...saved, ...next };
+  listeners.forEach((l) => l());
+}
+
+/** Shared between the Train tab and the history screen so both stay in sync. */
+export const savedPlans = {
+  subscribe(listener: () => void) {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  },
+  get: () => saved,
+  async refresh({ force = false } = {}) {
+    if (saved.loading) return;
+    if (!force && saved.plans && Date.now() - fetchedAt < STALE_MS) return;
+    const gen = generation;
+    setSaved({ loading: true, error: null });
+    try {
+      const plans = await listPlans(HISTORY_LIMIT);
+      if (gen !== generation) return;
+      fetchedAt = Date.now();
+      setSaved({ plans, loading: false });
+    } catch (e) {
+      if (gen !== generation) return;
+      setSaved({ loading: false, error: e instanceof ApiError ? e.message : 'Could not load your sessions.' });
+    }
+  },
+  add(plan: WorkoutPlan) {
+    setSaved({ plans: [plan, ...(saved.plans ?? []).filter((p) => p.id !== plan.id)] });
+  },
+  update(id: string, patch: Partial<WorkoutPlan>) {
+    if (!saved.plans) return;
+    setSaved({ plans: saved.plans.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
+  },
+  /** Called on sign-out so the next account never sees these sessions. */
+  clear() {
+    generation++;
+    fetchedAt = 0;
+    setSaved({ plans: null, loading: false, error: null });
   },
 };

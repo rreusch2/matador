@@ -27,6 +27,7 @@ import {
   WorkoutError,
   generateWorkout,
   planStore,
+  savedPlans,
   type WorkoutPrefs,
 } from '@/services/workouts';
 import { haptic } from '@/utils/haptics';
@@ -42,9 +43,9 @@ const STEPS = [
   'WRITING COACHING CUES',
   'FINALIZING YOUR SESSION',
 ];
-const STEP_MS = 2200;
+const STEP_MS = 1100;
 /** Typical build time. The bar eases toward 90% over this, then completes when the plan arrives. */
-const EXPECTED_MS = 14000;
+const EXPECTED_MS = 7000;
 const BUTTON_H = 56;
 const layout = LinearTransition.duration(260).easing(Easing.out(Easing.cubic));
 
@@ -117,6 +118,7 @@ export function WorkoutBuilderCard() {
       setStep(STEPS.length - 1);
       progress.value = withTiming(1, { duration: 260, easing: Easing.out(Easing.quad) });
       planStore.set(plan);
+      savedPlans.add(plan);
       timers.current.push(
         setTimeout(() => {
           haptic.success();

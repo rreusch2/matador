@@ -1,11 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Logo } from '@/components/Logo';
+import { planDay } from '@/components/SessionRow';
 import { Button, PressableScale } from '@/components/ui';
 import { colors, fonts, radius } from '@/constants/theme';
 import { useFitness } from '@/context/fitness';
@@ -13,8 +14,6 @@ import {
   EQUIPMENT_OPTIONS,
   GOAL_OPTIONS,
   LEVEL_OPTIONS,
-  WorkoutError,
-  generateWorkout,
   markPlanCompleted,
   planStore,
   type Intensity,
@@ -32,9 +31,9 @@ const INTENSITY_BARS: Record<Intensity, number> = { low: 1, moderate: 2, high: 3
 export default function WorkoutPlanScreen() {
   const insets = useSafeAreaInsets();
   const { logWorkout } = useFitness();
-  const [plan, setPlan] = useState<WorkoutPlan | null>(planStore.get());
-  const [regenerating, setRegenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const fromHistory = from === 'history';
+  const [plan] = useState<WorkoutPlan | null>(planStore.get());
   const [logged, setLogged] = useState(false);
 
   if (!plan) {
@@ -52,28 +51,6 @@ export default function WorkoutPlanScreen() {
   const level = LEVEL_OPTIONS.find((l) => l.key === plan.prefs.level);
   const totalSets = plan.main.reduce((sum, m) => sum + (m.sets ?? 0), 0);
 
-  const regenerate = async () => {
-    if (regenerating) return;
-    haptic.medium();
-    setError(null);
-    setRegenerating(true);
-    try {
-      const next = await generateWorkout(plan.prefs, {
-        notes: plan.notes ?? undefined,
-        avoid: plan.main.map((m) => m.name),
-      });
-      planStore.set(next);
-      setPlan(next);
-      setLogged(false);
-      haptic.success();
-    } catch (e) {
-      haptic.error();
-      setError(e instanceof WorkoutError ? e.message : 'Could not build a new version. Please try again.');
-    } finally {
-      setRegenerating(false);
-    }
-  };
-
   const log = () => {
     logWorkout(plan.logAs, plan.minutes);
     markPlanCompleted(plan.id);
@@ -88,12 +65,18 @@ export default function WorkoutPlanScreen() {
       <ScrollView
         key={plan.id}
         showsVerticalScrollIndicator={false}
-        style={regenerating && { opacity: 0.35 }}
-        scrollEnabled={!regenerating}
         contentContainerStyle={{ paddingTop: insets.top + 72, paddingBottom: insets.bottom + 140 }}
       >
         <Animated.View entering={FadeIn.duration(400)} style={styles.hero}>
-          <Text style={styles.kicker}>BUILT FOR YOU</Text>
+          <View style={styles.kickerRow}>
+            <Text style={styles.kicker}>{fromHistory ? `SAVED ${planDay(plan.createdAt)}` : 'BUILT FOR YOU'}</Text>
+            {fromHistory && !!plan.completedAt && (
+              <View style={styles.doneBadge}>
+                <Ionicons name="checkmark" size={10} color={colors.black} />
+                <Text style={styles.doneText}>COMPLETED {planDay(plan.completedAt)}</Text>
+              </View>
+            )}
+          </View>
           <Text style={styles.title}>{plan.title}</Text>
           {!!plan.summary && <Text style={styles.summary}>{plan.summary}</Text>}
           <View style={styles.chips}>
@@ -160,13 +143,6 @@ export default function WorkoutPlanScreen() {
         </Text>
       </ScrollView>
 
-      {regenerating && (
-        <Animated.View entering={FadeIn.duration(200)} style={styles.overlay} pointerEvents="none">
-          <ActivityIndicator color={colors.yellow} size="large" />
-          <Text style={styles.overlayText}>BUILDING A NEW VERSION</Text>
-        </Animated.View>
-      )}
-
       <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
         <PressableScale onPress={() => router.back()} style={styles.iconBtn} scaleTo={0.9} accessibilityLabel="Close">
           <Ionicons name="chevron-down" size={22} color={colors.white} />
@@ -176,35 +152,17 @@ export default function WorkoutPlanScreen() {
       </View>
 
       <View style={[styles.actions, { paddingBottom: insets.bottom + 14 }]}>
-        {error && (
-          <Animated.View entering={FadeIn.duration(200)} style={styles.error}>
-            <Ionicons name="alert-circle" size={16} color={colors.red} />
-            <Text style={styles.errorText}>{error}</Text>
-          </Animated.View>
-        )}
-        <View style={styles.actionRow}>
-          <PressableScale
-            onPress={regenerate}
-            containerStyle={{ flex: 1 }}
-            style={styles.secondary}
-            scaleTo={0.96}
-            hapticFeedback={false}
-            disabled={regenerating}
-          >
-            <Ionicons name="refresh" size={18} color={colors.white} />
-            <Text style={styles.secondaryText}>{regenerating ? 'BUILDING\u2026' : 'NEW VERSION'}</Text>
-          </PressableScale>
-          <PressableScale
-            onPress={logged || regenerating ? undefined : log}
-            containerStyle={{ flex: 1.3 }}
-            style={[styles.primary, logged && { backgroundColor: colors.white }]}
-            scaleTo={0.96}
-            hapticFeedback={false}
-          >
-            <Ionicons name={logged ? 'checkmark-circle' : 'checkmark'} size={18} color={colors.black} />
-            <Text style={styles.primaryText}>{logged ? 'LOGGED' : 'LOG WORKOUT'}</Text>
-          </PressableScale>
-        </View>
+        <PressableScale
+          onPress={logged ? undefined : log}
+          style={[styles.primary, logged && { backgroundColor: colors.white }]}
+          scaleTo={0.97}
+          hapticFeedback={false}
+        >
+          <Ionicons name={logged ? 'checkmark-circle' : 'checkmark'} size={18} color={colors.black} />
+          <Text style={styles.primaryText}>
+            {logged ? 'LOGGED' : plan.completedAt ? 'LOG AGAIN' : 'LOG WORKOUT'}
+          </Text>
+        </PressableScale>
       </View>
     </View>
   );
@@ -329,7 +287,18 @@ const styles = StyleSheet.create({
   topTitle: { fontFamily: fonts.black, color: colors.white, fontSize: 12, letterSpacing: 2.5 },
 
   hero: { paddingHorizontal: 20 },
+  kickerRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
   kicker: { fontFamily: fonts.bold, color: colors.yellow, fontSize: 11, letterSpacing: 3 },
+  doneBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    height: 20,
+    borderRadius: radius.pill,
+    backgroundColor: colors.yellow,
+  },
+  doneText: { fontFamily: fonts.black, color: colors.black, fontSize: 8.5, letterSpacing: 1.2 },
   title: { fontFamily: fonts.display, color: colors.white, fontSize: 48, lineHeight: 56, marginTop: 2 },
   summary: { fontFamily: fonts.medium, color: colors.offWhite, fontSize: 15, lineHeight: 22, marginTop: 4 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
@@ -438,18 +407,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 36,
   },
 
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 14,
-  },
-  overlayText: { fontFamily: fonts.black, color: colors.white, fontSize: 12, letterSpacing: 2 },
-
   actions: {
     position: 'absolute',
     left: 0,
@@ -457,34 +414,10 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingHorizontal: 20,
     paddingTop: 14,
-    gap: 10,
     backgroundColor: 'rgba(0,0,0,0.94)',
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  actionRow: { flexDirection: 'row', gap: 10 },
-  error: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    padding: 10,
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(239, 51, 64, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(239, 51, 64, 0.35)',
-  },
-  errorText: { flex: 1, fontFamily: fonts.semibold, color: colors.white, fontSize: 12.5, lineHeight: 17 },
-  secondary: {
-    height: 56,
-    borderRadius: radius.pill,
-    borderWidth: 1.5,
-    borderColor: colors.borderBright,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  secondaryText: { fontFamily: fonts.black, color: colors.white, fontSize: 12, letterSpacing: 1.2 },
   primary: {
     height: 56,
     borderRadius: radius.pill,
